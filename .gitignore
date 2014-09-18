@@ -1,5 +1,6 @@
 __pycache__/
 *.pyc
+pySupRST.egg-info/
 build/
 dist/
 MANIFEST
