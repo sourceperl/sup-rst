@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 from sqlalchemy import Column, DateTime, Float, Index, Integer, \
-                       SmallInteger, String, Table, Text, text
+                       SmallInteger, String, Table, Text, text, \
+                       ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship, backref
 
 # mother class of every map class (a class = SQL table row)
 Base = declarative_base()
@@ -28,11 +30,13 @@ class Host(Base):
     __tablename__ = 'hosts'
 
     id = Column(Integer, primary_key=True)
-    id_subnet = Column(Integer, nullable=False, server_default=text("'0'"))
+    id_subnet = Column(Integer, ForeignKey('subnets.id'))
     name = Column(String(30), nullable=False, server_default=text("''"))
     hostname = Column(String(30), nullable=False, server_default=text("''"))
     host_activity = Column(String(1), nullable=False,
                            server_default=text("'N'"))
+
+    subnet = relationship('Subnet', backref=backref('hosts'))
 
     def __repr__(self):
         return u"<Host(id_subnet=%r, name=%r, hostname=%r, host_activity=%r>" \
@@ -42,7 +46,7 @@ class Host(Base):
 class Icmp(Base):
     __tablename__ = 'icmp'
 
-    id_host = Column(Integer, primary_key=True, server_default=text("'0'"))
+    id_host = Column(Integer, ForeignKey('hosts.id'), primary_key=True)
     icmp_inhibition = Column(String(1), nullable=False,
                              server_default=text("'N'"))
     icmp_timeout = Column(SmallInteger, nullable=False,
@@ -64,6 +68,8 @@ class Icmp(Base):
     icmp_down_index = Column(Integer, nullable=False,
                              server_default=text("'0'"))
 
+    host = relationship('Host', backref=backref('icmp'))
+
     def __repr__(self):
         return u"<Icmp(id_host=%r, icmp_inhibition=%r, icmp_state=%r>" \
                % (self.id_host, self.icmp_inhibition, self.icmp_state)
@@ -73,11 +79,12 @@ class IcmpHistory(Base):
     __tablename__ = 'icmp_history'
 
     id = Column(Integer, primary_key=True)
-    host_id = Column(Integer, nullable=False, index=True,
-                     server_default=text("'0'"))
+    host_id = Column(Integer, ForeignKey('hosts.id'), index=True)
     event_type = Column(String(1), nullable=False, server_default=text("''"))
     event_date = Column(DateTime, nullable=False,
                         server_default=text("'0000-00-00 00:00:00'"))
+
+    host = relationship('Host', backref=backref('icmp_history'))
 
     def __repr__(self):
         return u"<IcmpHistory(host_id=%r, event_type=%r, event_date=%r>" \
@@ -88,11 +95,13 @@ class IcmpIndex(Base):
     __tablename__ = 'icmp_index'
 
     id = Column(Integer, primary_key=True)
-    id_host = Column(Integer, nullable=False, server_default=text("'0'"))
+    id_host = Column(Integer, ForeignKey('hosts.id'), index=True)
     date_time = Column(DateTime, nullable=False,
                        server_default=text("'0000-00-00 00:00:00'"))
     up_index = Column(Integer, nullable=False, server_default=text("'0'"))
     down_index = Column(Integer, nullable=False, server_default=text("'0'"))
+
+    host = relationship('Host', backref=backref('icmp_index'))
 
     def __repr__(self):
         return u"<IcmpIndex(id_host=%r, date_time=%r, up_index=%r, " \
@@ -104,10 +113,12 @@ class IcmpRttLog(Base):
     __tablename__ = 'icmp_rtt_log'
 
     id = Column(Integer, primary_key=True)
-    id_host = Column(Integer, nullable=False, server_default=text("'0'"))
+    id_host = Column(Integer, ForeignKey('hosts.id'))
     rtt = Column(Integer, nullable=False, server_default=text("'0'"))
     rtt_datetime = Column(DateTime, nullable=False,
                           server_default=text("'0000-00-00 00:00:00'"))
+
+    host = relationship('Host', backref=backref('icmp_rtt_log'))
 
     def __repr__(self):
         return u"<IcmpRTTLog(id_host=%r, rtt=%r, rtt_datetime=%r>" \
@@ -117,12 +128,14 @@ class IcmpRttLog(Base):
 class Mbus(Base):
     __tablename__ = 'mbus'
 
-    id_host = Column(Integer, primary_key=True, server_default=text("'0'"))
+    id_host = Column(Integer, ForeignKey('hosts.id'), primary_key=True)
     mbus_inhibition = Column(String(1), nullable=False,
                              server_default=text("'N'"))
     mbus_timeout = Column(SmallInteger, nullable=False,
                              server_default=text("'4'"))
     mbus_port = Column(Integer, nullable=False, server_default=text("'502'"))
+
+    host = relationship('Host', backref=backref('mbus'))
 
     def __repr__(self):
         return u"<Mbus(id_host=%r, mbus_inhibition=%r, mbus_timeout=%r, " \
@@ -134,7 +147,7 @@ class MbusTables(Base):
     __tablename__ = 'mbus_tables'
 
     id = Column(Integer, primary_key=True)
-    id_host = Column(Integer, nullable=False, server_default=text("'0'"))
+    id_host = Column(Integer, ForeignKey('hosts.id'))
     unit_id = Column(SmallInteger, nullable=False, server_default=text("'0'"))
     timeout = Column(SmallInteger, nullable=False, server_default=text("'0'"))
     address = Column(SmallInteger, nullable=False, server_default=text("'0'"))
@@ -142,6 +155,8 @@ class MbusTables(Base):
     status = Column(String(1), nullable=False, server_default=text("'E'"))
     update = Column(DateTime, nullable=False,
                     server_default=text("'0000-00-00 00:00:00'"))
+
+    host = relationship('Host', backref=backref('mbus_tables'))
 
     def __repr__(self):
         return u"<Mbus(id_host=%r, unit_id=%r, timeout=%r, " \
@@ -346,4 +361,16 @@ class Subnet(Base):
     def __repr__(self):
         return u"<Subnet(name=%r, gateway_tag=%r, gateway_code=%r)>" \
                % (self.name, self.gateway_tag, self.gateway_code)
+
+
+class SupEnv(Base):
+    __tablename__ = 'sup_env'
+
+    id = Column(Integer, primary_key=True)
+    tag = Column(String(15), unique=True, index=True, nullable=False,
+                 server_default=text("''"))
+    tag_value = Column(String(15), nullable=False, server_default=text("''"))
+
+    def __repr__(self):
+        return u"<SupEnv(tag=%r, tag_value=%r)>" % (self.tag, self.tag_value)
 

@@ -77,35 +77,24 @@ c = sup_rst()
 
 # main loop
 while True:
-#    # connect to DB
-#    try:
-#        db = mysql.connector.connect(**db_config)
-#    except mysql.connector.Error as err:
-#        # to log print(err)
-#        # wait before reconnect
-#        pass
-#    else:
-    nodes = c.session.query(Host.id.label('id'),
-                            Host.name.label('name'),
-                            Host.hostname.label('hostname'),
-                            Icmp.icmp_state.label('state'),
-                            Icmp.icmp_log_rtt.label('log_rtt'),
-                            Icmp.icmp_timeout.label('timeout')).\
-                 filter(Host.id == Icmp.id_host, 
-                        Host.host_activity == 'Y',
-                        Icmp.icmp_inhibition == 'N').\
-                 limit(500).all()
+    # connect to DB
+    session = c.Session()
+
+    nodes = session.query(Icmp).join(Host).\
+               filter(Host.host_activity == 'Y',
+                      Icmp.icmp_inhibition == 'N').\
+               limit(500).all()
 
     # loop start time
     start = time.time()
     # fill queue
     for node in nodes:
-        ips_q.put({'id': node.id,
-                   'name': node.name,
-                   'ip': node.hostname,
-                   'timeout': node.timeout,
-                    'old_state': node.state,
-                   'log_rtt': bool(node.log_rtt == 'Y')})
+        ips_q.put({'id': node.id_host,
+                   'name': node.host.name,
+                   'ip': node.host.hostname,
+                   'timeout': node.icmp_timeout,
+                    'old_state': node.icmp_state,
+                   'log_rtt': bool(node.icmp_log_rtt == 'Y')})
     # wait until worker threads are done to exit    
     ips_q.join()
     # loop end time
@@ -128,7 +117,7 @@ while True:
         pprint(out_node)
         # if current node is "up"
         if out_node['new_state'] == 'U':
-            c.session.query(Icmp).\
+            session.query(Icmp).\
                 filter(Icmp.id_host == out_node['id']).\
                 update({'icmp_state': out_node['new_state'],
                         'icmp_rtt':   out_node['rtt']})
@@ -138,10 +127,10 @@ while True:
                 icmp_log_new = IcmpRttLog(id_host = out_node['id'],
                                           rtt     = out_node['rtt'],
                                           rtt_datetime = out_node['update'])
-                c.session.add(icmp_log_new)
+                session.add(icmp_log_new)
         # if current host is "down"
         elif out_node['new_state'] == 'D':
-            c.session.query(Icmp).\
+            session.query(Icmp).\
                 filter(Icmp.id_host == out_node['id']).\
                 update({'icmp_state': out_node['new_state']})
 
@@ -150,6 +139,7 @@ while True:
             event_new = IcmpHistory(host_id    = out_node['id'],
                                     event_type = out_node['new_state'],
                                     event_date = out_node['update'])
+            session.add(event_new)
             # alarm message edit
             al_msg = "host '%s' state: %s" \
                    % (out_node['name'],
@@ -160,7 +150,8 @@ while True:
                         id_host=out_node['id'])
 
     # commit all changes
-    c.session.commit()
+    session.commit()
     #TODO update stats
+    session.close()
     # wait before next cycle
     time.sleep(ICMP_REFRESH - loop_time)
