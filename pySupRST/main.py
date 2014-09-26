@@ -72,7 +72,7 @@ class sup_rst():
         session = self.Session()
         try:
             env = session.query(db.SupEnv).filter_by(tag=tag).first()
-            if t:
+            if env:
                 # update tag
                 env.tag_value = tag_value
             else:

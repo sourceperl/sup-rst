@@ -7,7 +7,7 @@
 
 from pySupRST.main import sup_rst
 from pySupRST.db_class import *
-from threading import Thread
+from threading import Thread, current_thread
 import subprocess
 import datetime
 from pprint import pprint
@@ -23,135 +23,170 @@ import re
 # polling delay in second
 ICMP_REFRESH = 10
 
-# some global vars
+## some global vars
 num_threads = 40
-ips_q = queue.Queue()
-out_q = queue.Queue()
+# thread in/out queue
+th_in_q = queue.Queue()
+th_out_q = queue.Queue()
 
 # thread code : wraps system ping command
 def thread_pinger(i, q):
     """Pings hosts in queue"""
     while True:
-        # get an IP item form queue
-        item = q.get()
+        # get thread in from in queue
+        th_in  = q.get()
+        # init thread out dict for out queue
+        th_out = {}
+        th_out['th_name'] = current_thread().name
+        th_out['id']      = th_in['id']
         try:
             # fix timeout max
-            timeout = int(item['timeout'])
+            timeout = int(th_in['timeout'])
             timeout = timeout if (timeout <= 4) else 4
             # ping it
-            args=['/bin/ping', '-c', '1', '-W', str(timeout), str(item['ip'])]
+            args=['/bin/ping', '-c', '1', '-W', str(timeout), str(th_in['ip'])]
             p_ping = subprocess.Popen(args,
                                       shell=False,
                                       stdout=subprocess.PIPE)
             # save ping stdout
             p_ping_out = p_ping.communicate()[0]
             # ping return 0 if up
-            item['update'] = datetime.datetime.utcnow()
-
-            if (p_ping.wait() == 0):
+            th_out['update'] = datetime.datetime.utcnow()
+            # ping command return code
+            ping_rcode = p_ping.wait()
+            # ping command return 0: ping is ok
+            if (ping_rcode == 0):
                 # rtt min/avg/max/mdev = 22.293/22.293/22.293/0.000 ms
                 regex = 'rtt min/avg/max/mdev = (.*)/(.*)/(.*)/(.*) ms'
                 search = re.search(regex,
                                    p_ping_out, re.M|re.I)
-                item['new_state']  = u'U'
+                th_out['state']  = u'U'
                 try:
-                    item['rtt'] = int(round(float(search.group(2))))
+                    th_out['rtt'] = int(round(float(search.group(2))))
                 except:
-                    item['rtt'] = 0
+                    th_out['rtt'] = 0
+            # ping command return 1: ping timeout
+            elif (ping_rcode == 1):
+                th_out['state']  = u'D'
+            # ping command error for all other values
             else:
-                item['new_state']  = u'D'
-
+                th_out['state']  = u'E'
             # update output queue
-            out_q.put(item)
+            th_out_q.put(th_out)
         finally:
             # update queue : this ip is processed 
             q.task_done()
 
-# start the thread pool
+# init and start the thread pool
 for i in range(num_threads):
-    worker = Thread(target=thread_pinger, args=(i, ips_q))
+    worker = Thread(target=thread_pinger, args=(i, th_in_q))
     worker.setDaemon(True)
     worker.start()
 
+# build DB object
 c = sup_rst()
 
 # main loop
 while True:
-    # connect to DB
+    # begin a new DB session
     session = c.Session()
-
+    # read nodes list
     nodes = session.query(Icmp).join(Host).\
                filter(Host.host_activity == 'Y',
                       Icmp.icmp_inhibition == 'N').\
                limit(500).all()
-
     # loop start time
     start = time.time()
     # fill queue
     for node in nodes:
-        ips_q.put({'id': node.id_host,
-                   'name': node.host.name,
-                   'ip': node.host.hostname,
-                   'timeout': node.icmp_timeout,
-                    'old_state': node.icmp_state,
-                   'log_rtt': bool(node.icmp_log_rtt == 'Y')})
-    # wait until worker threads are done to exit    
-    ips_q.join()
+        th_in_q.put({'id':      node.id_host,
+                     'ip':      node.host.hostname,
+                     'timeout': node.icmp_timeout})
+    # wait until worker threads are done to exit
+    th_in_q.join()
     # loop end time
     end = time.time()
     loop_time = round(end - start, 2)
     # display result
-    out_nodes = []
+    th_outs = []
     while True:
         try:
-            out_node = out_q.get_nowait()
+            _th_out = th_out_q.get_nowait()
         except queue.Empty:
             break
-        out_nodes.append(out_node)
+        th_outs.append(_th_out)
 
     # display loop time
-    print("loop time: %s" % (loop_time))
+    print("################################")
+    print("new loop (time: %s)" % (loop_time))
+    print("################################")
 
     # update DB
-    for out_node in out_nodes:
-        pprint(out_node)
+    for th_out in th_outs:
+        # DEBUG
+        pprint(th_out)
+        # init current node object
+        c_node = session.query(Icmp). \
+                 filter_by(id_host = th_out['id']).first()
+        # copy last node state
+        last_state = c_node.icmp_state
+
         # if current node is "up"
-        if out_node['new_state'] == 'U':
-            session.query(Icmp).\
-                filter(Icmp.id_host == out_node['id']).\
-                update({'icmp_state': out_node['new_state'],
-                        'icmp_rtt':   out_node['rtt']})
-            # RTT log facility
-            if out_node['log_rtt']:
-                print("log RTT")
-                icmp_log_new = IcmpRttLog(id_host = out_node['id'],
-                                          rtt     = out_node['rtt'],
-                                          rtt_datetime = out_node['update'])
+        if th_out['state'] == u'U':
+            # process RTT log
+            if c_node.icmp_log_rtt == u'Y':
+                icmp_log_new = IcmpRttLog(id_host = th_out['id'],
+                                          rtt     = th_out['rtt'],
+                                          rtt_datetime = th_out['update'])
                 session.add(icmp_log_new)
+            # update icmp
+            c_node.icmp_fail_count = 0
+            c_node.icmp_up_index  += 1
+            c_node.icmp_rtt        = th_out['rtt']
+            # if node is not already "up"
+            if c_node.icmp_state != u'U':
+                # up count++
+                c_node.icmp_good_count += 1
+                # up counter > threshold -> host is set "up"
+                if c_node.icmp_good_count >= c_node.icmp_good_threshold:
+                    c_node.icmp_state = u'U'
         # if current host is "down"
-        elif out_node['new_state'] == 'D':
-            session.query(Icmp).\
-                filter(Icmp.id_host == out_node['id']).\
-                update({'icmp_state': out_node['new_state']})
+        elif th_out['state'] == u'D':
+            c_node.icmp_down_index += 1
+            c_node.icmp_good_count  = 0
+            # if node is not already "down"
+            if c_node.icmp_state != u'D':
+                # down count++
+                c_node.icmp_fail_count += 1
+                # down counter > threshold -> host is set "down"
+                if c_node.icmp_fail_count >= c_node.icmp_fail_threshold:
+                    c_node.icmp_state = u'D'
+        # if current host is in "error"
+        else:
+            c_node.icmp_state = u'E'
 
         # on status change
-        if out_node['new_state'] != out_node['old_state']:
-            event_new = IcmpHistory(host_id    = out_node['id'],
-                                    event_type = out_node['new_state'],
-                                    event_date = out_node['update'])
+        if c_node.icmp_state != last_state:
+            event_new = IcmpHistory(host_id    = th_out['id'],
+                                    event_type = c_node.icmp_state,
+                                    event_date = th_out['update'])
             session.add(event_new)
             # alarm message edit
+            state_word = "error"
+            if c_node.icmp_state == u'U':
+                state_word = "up"
+            elif c_node.icmp_state == u'D':
+                state_word = "down"
             al_msg = "host '%s' state: %s" \
-                   % (out_node['name'],
-                      "up" if out_node['new_state'] == 'U' else "down")
+                   % (c_node.host.name, state_word)
             c.set_alarm(al_msg,
                         daemon = "icmpd",
-                        date_time=out_node['update'],
-                        id_host=out_node['id'])
-
+                        date_time=th_out['update'],
+                        id_host=c_node.id_host)
+    #update stats
+    c.set_env_tag("ICMP_LOOP_TIME", loop_time)
     # commit all changes
     session.commit()
-    #TODO update stats
     session.close()
     # wait before next cycle
     time.sleep(ICMP_REFRESH - loop_time)
