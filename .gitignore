@@ -4,3 +4,4 @@ pySupRST.egg-info/
 build/
 dist/
 MANIFEST
+.idea/
