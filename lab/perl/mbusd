@@ -1,0 +1,540 @@
+#!/usr/bin/perl -w
+# SUP_RST modbus polling process
+# no daemon version for use with supervisord
+
+use strict;
+use DBI;
+use ModbusTCP;
+use Sys::Syslog;
+
+#TODO check fork error
+#TODO add a modbus status function
+
+# Constantes
+use constant {
+  # Code erreur
+  ERR_NO          => 0,
+  ERR_NEW         => 1,
+  ERR_OFFSET      => 2,
+  ERR_READ        => 3,
+  ERR_TCP         => 4
+};
+
+# prototype
+sub db_init();
+sub db_free();
+sub db_set($);
+sub db_get($);
+sub log_mesg($);
+sub scale_tm($$$$$$);
+sub word_to_ts($$$);
+sub mbus_task($);
+sub get_tables($);
+
+# some const
+# DB
+my $db_host           = 'localhost';
+my $db_name           = 'sup_rst';
+my $db_user           = 'sup_rst';
+my $db_pwd            = 'sup_rst';
+my $dbi_str           = "DBI:mysql:$db_name:$db_host";
+# misc
+my $ap_name           = 'mbusd';
+my $ap_version        = '1.3.0';
+my $lock_file         = '/var/lock/subsys/mbusd';
+my $pid_file          = '/var/run/mbusd.pid';
+my $daemon_id         = 'mbus';
+
+# time between 2 cycles
+my $polling_sec           = 60;
+# time before modbus/TCP reconnect (in s) 
+my $wait_reconnect_modbus = 15;
+# time before db reconnect (in s)
+my $wait_reconnect_db     = 15;
+# time-out (in s)
+my $timeout               = 15;
+# debug flag
+my $DEBUG                 = 0;
+
+# global vars (init)
+my @hosts       = ();
+my %dbh         = ();
+my $is_alive    = 1;
+my $wait_time   = 0;
+my $delay_cycle = 0;
+
+# check process account : must be root
+if ($> != 0) {
+  printf STDERR	$ap_name.' must be run by root'."\n";
+  log_mesg($ap_name.' must be run by root, exit');
+  exit 1;
+}
+
+if ( -e $lock_file) {
+  printf STDERR	$ap_name.' is already run'."\n";
+  log_mesg($ap_name.' is already start, exit');
+  exit 2;
+} else {
+  log_mesg($ap_name.' (release '.$ap_version.') start');
+}
+
+# daemonize
+#exit 0 if !(fork == 0);
+# become main daemon
+#setpgrp(0, 0);
+
+# make PID file
+open (PID, ">$pid_file");
+print PID "$$\n";
+close PID;
+
+# SIG handler
+sub SIG_TERM_FATHER {
+  # father process...
+  # Suppression du fichier PID
+  unlink $pid_file;
+  # kill child process (same group)
+  local $SIG{TERM} = 'IGNORE'; # no deep recurse
+  kill 'TERM', -$$;
+  # end father process
+  exit 0;
+};
+
+# try DB connect
+db_init();
+# set @hosts cache
+load_hosts();
+# launch a task for each modbus host
+foreach my $host (@hosts) {
+  $host->{pid} = mbus_task($host);
+}
+# set signal handler for father 
+$SIG{TERM} = \&SIG_TERM_FATHER;
+# check for died pid
+while((my $died_pid = wait) > 0) {
+  foreach my $host (@hosts) {
+    if ($host->{pid} == $died_pid) {
+      my $msg = 'mbusd "'.$host->{'name'}.'" task pid ['.$died_pid.'] is died';
+      edit_alarm($host->{'id'}, $msg);
+    }
+  }
+}
+# DB disconnect
+db_free();
+# end of process
+exit 0;
+
+# start a new modbus task
+sub mbus_task($) {
+  my ($host) = @_;
+  # father process return...
+  my $task_pid = fork;
+  # ...if fork error: return -1
+  return -1 if (!defined($task_pid));
+  # ...if fork ok: return pid
+  return $task_pid if ($task_pid > 0);
+  # add db handle
+  db_init();
+  # build modbus TCP object  
+  my $mb = ModbusTCP->new();
+  # setup host/port
+  $mb->host($host->{'hostname'});
+  $mb->port($host->{'port'});
+  $mb->timeout($timeout);
+  # build @ref_tables with db result
+  my @ref_tables = get_tables($host->{'id'});
+  my $last_connect = 0;
+  TCP_CONNECT: while(1) {
+    # TCP loop
+    debug("open TCP link to ".$mb->host.":".$mb->port);
+    $mb->open;
+    # modbus request loop
+    while(1) {
+      # check TCP connect
+      if ($mb->is_connect) {
+	# TCP OK
+	if (! $last_connect) {
+          edit_alarm($host->{'id'}, 'RTU "'.$host->{'name'}.'" link OK');
+	  $last_connect = 1;
+        }  
+      } else {
+	# TCP KO
+        if ($last_connect) {
+  	  edit_alarm($host->{'id'}, 'RTU "'.$host->{'name'}.'" link KO');
+	  $last_connect = 0;
+        }	      
+	# skip request loop -> try new connection
+	last;
+      } 	      
+      # time check    
+      my $start_loop = time;
+      ### process @ref_tables
+      my @loop_tables = @ref_tables;
+      while(defined(my $table = shift (@loop_tables)) and $mb->is_connect) {
+        debug("read table: ".$table->{unit_id}.";".$table->{address}.";".$table->{size});
+        # modbus read table
+        my @data = $mb->read($table->{unit_id}, READ_HOLDING_REGISTERS,
+                             $table->{address}, $table->{size});
+        # read status ?
+        if ($mb->is_ok) {
+          debug("read ok");  
+          # update table status infos
+          db_set("UPDATE `mbus_tables` ". 
+                 "SET `status`='G', `update`=NOW() ".
+                 "WHERE `id`='".$table->{id_table}."'");
+          ## process all TS items for this table
+          my $query = 'SELECT * FROM `mbus_ts` '.
+                      'WHERE `id_table` = '.$table->{id_table};
+          my @ts_array = db_get($query);
+          while(my $hash_var = shift @ts_array) {
+            # ts must be in use
+            next if (!$hash_var->{'use'});
+            # status
+            my $ts_error = ERR_NO;
+            my $ts       = 0;
+            # extract TS word from table
+            if (defined(my $word_ts = $data[$hash_var->{'index'}])) {
+              # retrieve ts
+              $ts = word_to_ts($word_ts, $hash_var->{bit}, $hash_var->{bit_order});
+              # if ts not in word
+              $ts_error = ERR_OFFSET if (!defined($ts));
+              # not option
+              $ts = not $ts if ($hash_var->{'not'});
+              # alarm edit (if al is set)
+              if (($ts != $hash_var->{'ts'}) and $hash_var->{'al'}) {
+                my $msg = '"'.$hash_var->{label}.'" '; 
+                if ($ts) {
+                  $msg .= '('.$hash_var->{'label_0'}.') -> ('.$hash_var->{'label_1'}.')';
+                } else {
+                  $msg .= '('.$hash_var->{'label_1'}.') -> ('.$hash_var->{'label_0'}.')';
+                }
+                edit_alarm($host->{id}, $msg);
+              }
+            } else {
+              # TS not in table
+              $ts_error = ERR_OFFSET;
+            }
+            # update "ts" db record
+            if (!$ts_error) {
+              # update "ts" db record
+              db_set("UPDATE `mbus_ts` SET `ts`='".$ts."', `error`='0' ".
+                     "WHERE `id`='".$hash_var->{'id'}."'");
+              # "ts" log (if change)
+              db_set("INSERT INTO `mbus_ts_log` (`id_ts`,`ts`,`update`) ".
+                     "VALUES ('".$hash_var->{'id'}."', '".$ts."', NOW())")
+                if (!($ts == $hash_var->{'ts'}));
+            } else {
+              db_set("UPDATE `mbus_ts` SET `error`='".$ts_error."' ".
+                     "WHERE `id`='".$hash_var->{'id'}."'");
+            }
+          }
+          ## process all TM items for this table
+          $query = 'SELECT * FROM `mbus_tm` '.
+                   'WHERE `id_table` = '.$table->{'id_table'};
+          my @tm_array = db_get($query);
+          while(my $hash_var = shift @tm_array) {
+            # tm must be in use
+            next if (!$hash_var->{'use'});
+            # status
+            my $tm_error = ERR_NO;
+            my $tm       = 0;
+            # extract TM from table, scale it and update db
+            if (defined(my $_tm = $data[$hash_var->{'index'}])) {
+              # signed value
+              $_tm = unpack('s', pack( 's', $_tm)) if ($hash_var->{'signed'});
+              # scale
+              $tm = scale_tm($_tm, 
+                             $hash_var->{'can_max'}, $hash_var->{'can_min'},
+                             $hash_var->{'gaz_max'}, $hash_var->{'gaz_min'},
+                             '%.f');
+              # update table status infos (set error flag)
+              db_set("UPDATE `mbus_tm` SET `tm`='".$tm."' ".
+                     "WHERE `id`='".$hash_var->{'id'}."'");
+              # log tm if log flag is set
+              if ($hash_var->{'log'}) {
+                my $sql = "INSERT INTO `mbus_tm_log` (`id_tm`,`tm`,`update`) "
+                         ."VALUES ('".$hash_var->{'id'}."', '".$tm."', NOW())";
+                db_set($sql);
+              }
+              ### alarm
+              # set alarm var
+              my $low_level  = ($tm < ($hash_var->{'tm_min'}));
+              my $end_low_level  = ($tm > ($hash_var->{'tm_min'} + $hash_var->{'tm_hist'}));
+              my $high_level = ($tm > ($hash_var->{'tm_max'}));
+              my $end_high_level = ($tm < ($hash_var->{'tm_max'} - $hash_var->{'tm_hist'}));
+              my $low_alarm  = ($hash_var->{'al_min'});
+              my $high_alarm = ($hash_var->{'al_max'});
+              ## low level process
+              # -> new alarm
+              if ($low_level and !$low_alarm) {
+                # set low alarm
+                db_set("UPDATE `mbus_tm` SET `al_min`='1' ".
+                        "WHERE `id`='".$hash_var->{'id'}."'");
+                # set RST alarm (ASCII message)
+                my $msg = '"'.$hash_var->{'label'}.'" alarm () -> (LOW) '.$tm.
+                          " ".$hash_var->{'unit'};
+                edit_alarm($host->{'id'}, $msg) if ($hash_var->{'al'});
+              } 
+              # -> end of low alarm
+              if ($end_low_level and $low_alarm) {
+                # reset low alarm
+                db_set("UPDATE `mbus_tm` SET `al_min`='0' ".
+                        "WHERE `id`='".$hash_var->{'id'}."'");
+                # set RST alarm (ASCII message)
+                my $msg = '"'.$hash_var->{'label'}.'" alarm (LOW) -> () '.$tm.
+                          " ".$hash_var->{'unit'};
+                edit_alarm($host->{'id'}, $msg) if ($hash_var->{'al'});
+              } 
+              ## high level process
+              # -> new alarm
+              if ($high_level and !$high_alarm) {
+                # set high alarm
+                db_set("UPDATE `mbus_tm` SET `al_max`='1' ".
+                        "WHERE `id`='".$hash_var->{'id'}."'");
+                # set RST alarm (ASCII message)
+                my $msg = '"'.$hash_var->{'label'}.'" alarm () -> (HIGH) '.$tm.
+                          " ".$hash_var->{'unit'};
+                edit_alarm($host->{'id'}, $msg) if ($hash_var->{'al'});
+              } 
+              # -> end of high alarm
+              if ($end_high_level and $high_alarm) {
+                # reset high alarm
+                db_set("UPDATE `mbus_tm` SET `al_max`='0' ".
+                        "WHERE `id`='".$hash_var->{'id'}."'");
+                # set RST alarm (ASCII message)
+                my $msg = '"'.$hash_var->{'label'}.'" alarm (HIGH) -> () '.$tm.
+                          " ".$hash_var->{'unit'};
+                edit_alarm($host->{'id'}, $msg) if ($hash_var->{'al'});
+              } 
+            } else {
+              # TM not in table
+              $tm_error = ERR_OFFSET;
+            }
+            # update "tm" db record
+            if (!$tm_error) {
+              db_set("UPDATE `mbus_tm` SET `tm`='".$tm."', `error`='0' ".
+                     "WHERE `id`='".$hash_var->{'id'}."'");
+            } else {
+              db_set("UPDATE `mbus_tm` SET `error`='".$tm_error."' ".
+                     "WHERE `id`='".$hash_var->{'id'}."'");
+            }
+          } # end of alarms process (tm)
+          ## process all TG items for this table
+          $query = 'SELECT * FROM `mbus_tg` '.
+                   'WHERE `id_table` = '.$table->{'id_table'};
+          my @tg_array = db_get($query);
+          while(my $hash_var = shift @tg_array) {
+            # tg must be in use
+            next if (!$hash_var->{'use'});
+            # status
+            my $tg_error = ERR_NO;
+            my $tg       = 0;
+            # extract TG from table, scale it and update db
+            if (defined(my $_tg = $data[$hash_var->{'index'}])) {
+              # diff between index in RTU and the last one
+              my $diff = $_tg - $hash_var->{'last_tg'};
+              if ($diff < 0) {
+                $tg = 65536 - $hash_var->{'last_tg'} + $_tg;
+              } else {
+                $tg = $diff;
+              }
+              # apply weight
+              $tg = $tg * $hash_var->{'weight'};
+              # update table status infos (set error flag)
+              db_set("UPDATE `mbus_tg` SET `tg`=`tg`+'".$tg."', `last_tg`='".$_tg."', `error`='0' ".
+                     "WHERE `id`='".$hash_var->{'id'}."'");
+            } else {
+              # TG not in table
+              $tg_error = ERR_OFFSET;
+            }
+            # update "tg" db record
+            if ($tg_error != ERR_NO) {
+              db_set("UPDATE `mbus_tg` SET `error`='".$tg_error."' ".
+                     "WHERE `id`='".$hash_var->{'id'}."'");
+            }
+          } # end of TG process
+        } else {
+          ## read error actions
+          debug("read error");
+          #  update table status infos (set error flag)
+          db_set("UPDATE `mbus_tables` SET `status`='E' ".
+                 "WHERE `id`='".$table->{'id_table'}."'");
+          # update items (TS, TM) error field
+          db_set("UPDATE `mbus_ts` SET `error`='".ERR_READ."' ".
+                 "WHERE `id_table`='".$table->{'id_table'}."'");
+          db_set("UPDATE `mbus_tm` SET `error`='".ERR_READ."' ".
+                 "WHERE `id_table`='".$table->{'id_table'}."'");
+        }
+      } # foreach tables
+      # calcul du temp d'attente (afin d'assurer une scrutation r�guli�re)
+      $delay_cycle = time - $start_loop;
+      $wait_time   = $polling_sec - $delay_cycle;
+      $wait_time   = 0 if $wait_time < 0;
+      sleep($wait_time);
+    } # while TCP is connect
+  debug("connect error");
+  # on TCP connect error
+  # update mbus_tables error flag
+  db_set("UPDATE `mbus_tables` SET `status`='E' ".
+         "WHERE `id_host`='".$host->{'id'}."'"); 
+  # each tables for this host...
+  my @loop_tables = @ref_tables;
+  while(defined(my $table = shift (@loop_tables))) {
+    # update items (TS, TM) error field for each tables
+    db_set("UPDATE `mbus_ts` SET `error`='".ERR_TCP."' ".
+            "WHERE `id_table`='".$table->{'id_table'}."'");
+    db_set("UPDATE `mbus_tm` SET `error`='".ERR_TCP."' ".
+            "WHERE `id_table`='".$table->{'id_table'}."'");
+  }
+  # wait before retry
+  sleep($wait_reconnect_modbus); 
+  }  
+}
+
+# Initialisation des structures de donn�es depuis la base de donn�es
+sub load_hosts {
+  # Reset le tableau hosts
+  @hosts = ();
+  # Lecture de la configuration depuis la base de donn�es
+  my $query = 'SELECT
+                 hosts.id AS id,
+                 hosts.hostname AS hostname,
+                 mbus.mbus_port AS port,
+                 mbus.mbus_timeout AS timeout,
+                 hosts.name AS name
+               FROM
+                 `hosts`,
+                 `mbus`,
+                 `mbus_tables`
+               WHERE
+                 hosts.id = mbus_tables.id_host
+               AND
+                 hosts.id = mbus.id_host
+               AND  
+                 mbus.mbus_inhibition = \'N\'
+               AND
+                 hosts.host_activity = \'Y\'
+               GROUP BY hosts.id';
+  my @hosts_array = db_get($query);
+  # build hash %hosts with db data
+  while(defined(my $host_var = shift @hosts_array)) {
+      push(@hosts, {id       => $host_var->{'id'},
+                    hostname => $host_var->{'hostname'},
+                    port     => $host_var->{'port'},
+                    timeout  => $host_var->{'timeout'},
+                    name     => $host_var->{'name'}});
+  }
+}
+
+# get_tables($id_table)
+# return an array of hash reference with modbus table data (unit_id, address...)
+sub get_tables($) {
+  my ($id_table) = @_;
+  # get db modbus table
+  my $query = "SELECT
+                mbus_tables.id AS id_table,
+                mbus_tables.unit_id AS unit_id,
+                mbus_tables.address AS address,
+                mbus_tables.size AS size,
+                mbus_tables.status AS status 
+              FROM
+                `mbus_tables`
+              WHERE
+                mbus_tables.id_host = '".$id_table."'"; 
+  # return data
+  return db_get($query);
+}
+
+# log_mesg(mesg) log mesg sur le syslog
+sub log_mesg($) {
+  my ($mesg) = @_;
+  openlog($ap_name, 'ndelay', 'daemon');
+  syslog('notice', $mesg);
+  closelog();
+}
+
+# debug(mesg) message de debug
+sub debug($) {
+  my ($mesg) = @_;
+  print '['.$$.']'.$mesg."\n" if $DEBUG;
+}
+
+### DB routines for use with fork()
+
+# init %dbh with db process specific handle 
+sub db_init() {
+  $dbh{$$} = DBI->connect($dbi_str, $db_user, $db_pwd, {RaiseError => 0}) if (!defined($dbh{$$}));
+  ($dbh{$$}) or die "[$$]unable to connect to $dbi_str (user:$db_user)";
+}
+
+# free a db handle
+sub db_free() {
+  $dbh{$$}->disconnect if (defined($dbh{$$}));
+  $dbh{$$} = undef;
+}
+
+sub db_get($) {
+  my ($query) = @_; 
+  # db handle
+  my $db = $dbh{$$};
+  return undef if (!$db);
+  # get db modbus table
+  my $sth = $db->prepare($query); 
+  $sth->execute;
+  # build @ref_tables with db result
+  my @ref_result = ();
+  while(defined($_ = $sth->fetchrow_hashref)) {push @ref_result, $_}
+  return @ref_result;
+}
+
+sub db_set($) {
+  my ($query) = @_; 
+  # db handle
+  my $db = $dbh{$$};
+  return undef if (!$db);
+  # do SQL query
+  return $db->do($query); ;
+}
+### END of db routines
+
+# ajout d'une alarme au log sup_rst
+sub edit_alarm {
+  my ($host_id, $msg) = @_;
+  my $query = "INSERT ".
+              "INTO `alarms` (`date_time`, `id_host`,`daemon`, `message`) ".
+              "VALUES (NOW(), '".$host_id."', '".$daemon_id."', '".$msg."')";
+  db_set($query);
+}
+
+# set scale for TM
+# scale_tm($tm, $max_can, $min_can, $max_gaz, $min_gaz, $fmt)
+# $fmt is printf like format string
+sub scale_tm($$$$$$) {
+  my ($tm, $max_can, $min_can, $max_gaz, $min_gaz, $fmt) = @_;
+  $tm = ((($tm - $min_can) / ($max_can - $min_can)) * ($max_gaz-$min_gaz)) + $min_gaz;
+  return sprintf($fmt, $tm);
+}
+
+# word_to_ts($word, $ts, $ts_order)
+# return value of bits at $ts position (PSLS like) in $word
+# $ts_order have several values:
+#   "0": msb (most significant bit) is at $ts=1, lsb is $ts=16
+#   "1": msb is at $ts=16, lsb is at $ts=1
+#   "2": msb is at $ts=15, lsb is at $ts=0
+# example:
+# word_to_ts("0100 0000 000 0000", 2, 0) return "1"
+sub word_to_ts($$$) {
+  my ($word, $ts, $ts_order) = @_;
+  my @bits = split(//, unpack("b*", pack("S", $word)));
+  if ($ts_order == 0) {
+    @bits = reverse @bits;
+    return undef if (($ts < 1) or ($ts > 16));
+    return $bits[--$ts];
+  } elsif ($ts_order == 1) {
+    return undef if (($ts < 1) or ($ts > 16));
+    return $bits[--$ts];
+  } else {
+    return undef if (($ts < 0) or ($ts > 15));
+    return $bits[$ts];
+  }
+}

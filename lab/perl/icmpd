@@ -1,0 +1,221 @@
+#!/usr/bin/perl -w
+# check network node with ICMP (ping) request
+# this is a no daemon version to use with supervisord
+
+use strict;
+use DBI;
+use Net::Ping;
+use Sys::Syslog;
+use Time::HiRes qw(gettimeofday);
+
+# *** Paramètre de l'application ***
+# Paramètres de la base de données
+my $db_host           = 'localhost';
+my $db_name           = 'sup_rst';
+my $db_user           = 'sup_rst';
+my $db_pwd            = 'sup_rst';
+# Divers
+# Nom de l'application pour le syslog et le fichier d'alarme
+my $ap_name           = 'icmpd';
+my $ap_version        = '1.5.0';
+my $lock_file         = '/var/lock/subsys/icmpd';
+# Configuration des messages d'alarme
+my $daemon_id         = 'icmp';
+# Temps entre chaques ping (en secondes)
+my $polling_sec       = 60;
+# Temps avant tentative de reconnexion à la base de données (en secondes) 
+my $wait_reconnect_db = 60;
+# Ping time-out (en secondes)
+my $def_timeout       = 4;
+
+# Variables globales (initialisation)
+my @hosts       = ();
+my $is_alive    = 1;
+my $must_init   = 1;
+my $wait_time   = 0;
+my $delay_cycle = 0;
+my $dbh;
+
+# Gestionnaire de signaux
+$SIG{TERM} = sub {
+  $is_alive = 0;
+};
+$SIG{HUP} = 'IGNORE';
+
+# Vérifie les droits du processus (doit être root)
+if ($> != 0) {
+  printf STDERR	$ap_name.' must be run by root'."\n";
+  log_mesg($ap_name.' must be run by root, exit');
+  exit 1;
+}
+
+if ( -e $lock_file) {
+  printf STDERR	$ap_name.' is already run'."\n";
+  log_mesg($ap_name.' is already start, exit');
+  exit 2;
+} else {
+  log_mesg($ap_name.' (release '.$ap_version.') start');
+}
+
+# Transformation en démon (appel de exit pour le processus père)
+#exit 0 if !(fork == 0);
+
+# Boucle de traitement des requêtes
+while($is_alive) {
+  # tentative de connexion à MySQL
+  $dbh = DBI->connect("DBI:mysql:$db_name:$db_host", 
+                      $db_user, $db_pwd, {RaiseError => 0});
+  if ($dbh) {
+    init();
+    my $start_loop = time;
+    foreach my $ref_host (@hosts) {
+      my $ping = Net::Ping->new("icmp");
+      # Mesure de rtt en ms (Net::Ping ne fournit un rtt qu'en seconde ?)
+      my $t1 = gettimeofday;
+      my ($ping_state, undef, $ip) = $ping->ping($ref_host->{hostname}, 
+                                                 $ref_host->{timeout});
+      my $t2 = gettimeofday;
+      # Arrondi de $rtt (valeur en ms)
+      my $rtt = 10 * (sprintf('%u', (100 * ($t2 - $t1))));
+      # Si erreur réseau...
+      if (!defined($ping_state)) {
+        # si le noeud n'est pas déjà en erreur...
+	      host_status_change($ref_host, "E") if ($ref_host->{state} ne "E");
+      # Si réponse correcte...
+      } elsif ($ping_state == 1) {
+      	# log le rtt (si l'option est active)
+      	host_log_rtt($ref_host, $rtt)      if ($ref_host->{log_rtt});
+        # sauvegarde le rtt et reset le compteur de défauts	      
+      	# incrémente l'index "up"
+      	$dbh->do("UPDATE `icmp` 
+                  SET `icmp_rtt` = '$rtt',
+                      `icmp_fail_count` = '0',
+                      `icmp_up_index` = `icmp_up_index` + 1
+                  WHERE `id_host` = '$ref_host->{id}'");
+      	# si le noeud n'est pas déjà "up"... 
+        if ($ref_host->{state} ne "U") {
+          # mise à jour du compteur de défaut
+          $dbh->do('UPDATE `icmp` '.
+                   'SET `icmp_good_count` = `icmp_good_count` + 1 '.
+                   'WHERE `id_host` = '."'$ref_host->{id}'");
+          # déclare l'hôte Up si franchissement du compteur
+          if (1 + $ref_host->{good_count} >= $ref_host->{good_threshold}) {
+            host_status_change($ref_host, "U");
+          }  
+        }  
+      # Si absence de réponse...
+      } elsif ($ping_state == 0) {
+      	# incrémente l'index "down"
+      	$dbh->do('UPDATE `icmp` '.
+                 'SET `icmp_down_index` = `icmp_down_index` + 1, '.
+                 '    `icmp_good_count` = '."'0'".
+                 'WHERE `id_host` = '."'".$ref_host->{id}."'");
+        # si le noeud n'est pas déjà "down"... 
+        if ($ref_host->{state} ne "D") {
+          # mise à jour du compteur de défaut
+          $dbh->do('UPDATE `icmp` '.
+                   'SET `icmp_fail_count` = `icmp_fail_count` + 1 '.
+                   'WHERE `id_host` = '."'".$ref_host->{id}."'");
+          # déclare l'hôte Down si franchissement du compteur
+          if (1 + $ref_host->{fail_count} >= $ref_host->{fail_threshold}) {
+            host_status_change($ref_host, "D");
+          }  
+        }
+      }
+    }
+    # déconnexion de la bdd
+    $dbh->disconnect;
+    # calcul du temp d'attente (afin d'assurer une scrutation réguliére)
+    $delay_cycle = time - $start_loop;
+    $wait_time   = $polling_sec - $delay_cycle;
+    $wait_time   = 0 if $wait_time < 0;
+  } else {
+    # attente avant un nouvel essai de connexion à MySQL
+    $wait_time = $wait_reconnect_db;
+  }
+  sleep($wait_time);
+}
+
+sub host_log_rtt {
+  my ($ref_host, $rtt) = @_;
+  # Historise le Round Trip Time dans la base de donnée
+  $dbh->do("INSERT INTO `icmp_rtt_log` (`id_host`,`rtt`, `rtt_datetime`)
+            VALUES ('$ref_host->{id}', '$rtt', NOW())");
+}
+
+sub host_status_change {
+  my ($ref_host, $new_state) = @_;
+  my $old_state = $ref_host->{state};
+  # Sauvegarde de l'état (+ date chgt) dans la base
+  $dbh->do("UPDATE `icmp`
+            SET `icmp_state` = '$new_state', 
+                `icmp_chg_state` = NOW()
+            WHERE `id_host` = '$ref_host->{id}'");
+  # Mise à jour de l'historique
+  $dbh->do("INSERT INTO `icmp_history` (`id_host`,`event_type`,`event_date`)
+            VALUES ('$ref_host->{id}', '$new_state', NOW())");
+  # Edition d'un message d'alarme
+  my $msg = 'host: "'.$ref_host->{name}.'" ';
+  $msg .= "state: down"  if $new_state eq "D";
+  $msg .= "state: up"    if $new_state eq "U";
+  $msg .= "state: error" if $new_state eq "E";
+  $msg =~ s/\'/\\\'/;
+  $dbh->do("INSERT 
+            INTO `alarms` (`date_time`, `id_host`, `daemon`, `message`)
+            VALUES (NOW(), '$ref_host->{id}', '$daemon_id', '$msg')");
+  # Mise à jour du hachage global
+  $ref_host->{state} = $new_state;
+}
+
+# log_mesg(mesg) log mesg sur le syslog
+sub log_mesg {
+  my ($mesg) = @_;
+  openlog($ap_name, 'ndelay', 'daemon');
+  syslog('notice', $mesg);
+  closelog();
+}
+
+# Initialisation des structures de données depuis la base de données
+sub init {
+  # Reset parse flag
+  $must_init = 0;
+  # Reset le hachage hosts
+  @hosts = ();
+  # Lecture de la configuration depuis la base de données
+  my $query = 'SELECT
+                 hosts.id AS id,
+                 hosts.hostname AS hostname,
+                 hosts.name AS name,
+                 icmp.icmp_log_rtt AS icmp_log_rtt,
+                 icmp.icmp_state AS icmp_state,
+                 icmp.icmp_good_threshold AS icmp_good_threshold,
+                 icmp.icmp_good_count AS icmp_good_count,
+                 icmp.icmp_fail_threshold AS icmp_fail_threshold,
+                 icmp.icmp_fail_count AS icmp_fail_count
+               FROM
+                 `hosts`,
+                 `icmp`
+               WHERE
+                 hosts.id = icmp.id_host
+               AND	 
+                 hosts.host_activity = \'Y\'
+               AND
+                 icmp.icmp_inhibition  = \'N\'';
+  my $sth = $dbh->prepare($query);
+  $sth->execute;
+  while(my $hash_var = $sth->fetchrow_hashref) {
+    push @hosts, {id              => $hash_var->{id},
+                  timeout         => $hash_var->{timeout},
+                  hostname        => $hash_var->{hostname},
+                  name            => $hash_var->{name},
+                  log_rtt         => ($hash_var->{icmp_log_rtt} eq 'Y'),
+                  state           => $hash_var->{icmp_state},
+                  good_threshold  => $hash_var->{icmp_good_threshold},
+                  good_count      => $hash_var->{icmp_good_count},
+                  fail_threshold  => $hash_var->{icmp_fail_threshold},
+                  fail_count      => $hash_var->{icmp_fail_count}};
+  }
+  # Mise à jour des stats
+  $dbh->do("UPDATE  `sup_rst`.`variables` SET  `value` = '$delay_cycle' WHERE  `variables`.`name` =  'icmp_delay';");
+  $dbh->do("UPDATE  `sup_rst`.`variables` SET  `value` = NOW()  WHERE  `variables`.`name` =  'icmp_update';");
+}
