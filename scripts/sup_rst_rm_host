@@ -1,0 +1,139 @@
+#!/usr/bin/env python2
+
+import argparse
+import pymysql.cursors
+import sys
+
+# some consts
+# DB
+DB_HOST = 'localhost'
+DB_USER = 'sup_rst'
+DB_PWD = 'sup_rst'
+DB_NAME = 'sup_rst'
+
+
+# some routines
+def query_yes_no(question, default="yes"):
+    """Ask a yes/no question via raw_input() and return their answer.
+
+    "question" is a string that is presented to the user.
+    "default" is the presumed answer if the user just hits <Enter>.
+        It must be "yes" (the default), "no" or None (meaning
+        an answer is required of the user).
+
+    The "answer" return value is True for "yes" or False for "no".
+    """
+    valid = {"yes": True, "y": True, "ye": True,
+             "no": False, "n": False}
+    if default is None:
+        prompt = " [y/n] "
+    elif default == "yes":
+        prompt = " [Y/n] "
+    elif default == "no":
+        prompt = " [y/N] "
+    else:
+        raise ValueError("invalid default answer: '%s'" % default)
+
+    while True:
+        sys.stdout.write(question + prompt)
+        choice = raw_input().lower()
+        if default is not None and choice == '':
+            return valid[default]
+        elif choice in valid:
+            return valid[choice]
+        else:
+            sys.stdout.write("Please respond with 'yes' or 'no' "
+                             "(or 'y' or 'n').\n")
+
+
+def do_sql(sql):
+    """do SQL request and echo result"""
+    print(sql)
+    nb_row = db_cursor.execute(sql)
+    if nb_row:
+        print('%i row(s) affected' % nb_row)
+    else:
+        print('no row affected')
+
+
+# parse args
+parser = argparse.ArgumentParser()
+parser.add_argument('host_id', type=int, help='ID of the host in DB')
+parser.add_argument('-f', action='store_true', default=False, help='Force remove even if host is active')
+args = parser.parse_args()
+
+# init connection to database
+db_connect = pymysql.connect(host=DB_HOST,
+                             user=DB_USER,
+                             password=DB_PWD,
+                             db=DB_NAME,
+                             charset='utf8mb4',
+                             cursorclass=pymysql.cursors.DictCursor,
+                             autocommit=True)
+
+db_cursor = db_connect.cursor()
+
+# read hosts
+db_cursor.execute('SELECT * FROM `hosts` WHERE `id` = %i ' % args.host_id)
+hosts_data = db_cursor.fetchone()
+
+# read tables with id_host as foreign key
+tables = {}
+for k in ('alarms', 'icmp', 'icmp_history', 'icmp_index', 'icmp_rtt_log',
+          'mbus', 'mbus_tables', 'mbus_v_ts', 'mbus_v_tm', 'mbus_v_tg',):
+    tables[k] = {}
+    tables[k]['nb'] = db_cursor.execute('SELECT * FROM `%s` WHERE `id_host` = %i' % (k, args.host_id))
+    tables[k]['data'] = db_cursor.fetchone()
+
+# search mbus items for host mbus_tables
+if tables['mbus_tables']['nb']:
+    # mbus ts
+    tables['mbus_ts'] = {}
+    tables['mbus_ts']['nb'] = db_cursor.execute('SELECT `id` FROM `mbus_ts` '
+                                                'WHERE `mbus_ts`.`id_table` '
+                                                'IN (SELECT `id` FROM `mbus_tables` WHERE `id_host` = %i)'
+                                                % args.host_id)
+    tables['mbus_ts']['data'] = db_cursor.fetchall()
+    # mbus tm
+    tables['mbus_tm'] = {}
+    tables['mbus_tm']['nb'] = db_cursor.execute('SELECT `id` FROM `mbus_tm` '
+                                                'WHERE `mbus_tm`.`id_table` '
+                                                'IN (SELECT `id` FROM `mbus_tables` WHERE `id_host` = %i)'
+                                                % args.host_id)
+    tables['mbus_tm']['data'] = db_cursor.fetchall()
+    # mbus tg
+    tables['mbus_tg'] = {}
+    tables['mbus_tg']['nb'] = db_cursor.execute('SELECT `id` FROM `mbus_tg` '
+                                                'WHERE `mbus_tg`.`id_table` '
+                                                'IN (SELECT `id` FROM `mbus_tables` WHERE `id_host` = %i)'
+                                                % args.host_id)
+    tables['mbus_tg']['data'] = db_cursor.fetchall()
+
+
+# display table infos
+print('tables list for host ID %i:' % args.host_id)
+for name in sorted(tables):
+    if tables[name]['nb']:
+        print('%8i row(s) in table %s' % (tables[name]['nb'], name))
+print('')
+
+# host record
+if hosts_data:
+    print('find host "%s" at address "%s"' % (hosts_data['name'], hosts_data['hostname']))
+    # check host is not active
+    if not args.f:
+        if hosts_data['host_activity'] != 'N':
+            print('host is not turn off, you must turn it off before remove it')
+            exit(1)
+
+# check remove ok
+if query_yes_no('remove it ?', 'no'):
+    print('do SQL DELETE:')
+    # remove tables with id_host as foreign key
+    for name in sorted(tables):
+        if tables[name]['nb']:
+            do_sql('DELETE FROM `%s` WHERE `%s`.`id_host` = \'%s\'' % (name, name, args.host_id))
+    # removes hosts
+    do_sql('DELETE FROM `hosts` WHERE `hosts`.`id` = \'%s\'' % args.host_id)
+else:
+    print('abort remove')

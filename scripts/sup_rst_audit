@@ -3,35 +3,43 @@
 import pymysql.cursors
 from collections import defaultdict
 
+# some consts
+# DB
+DB_HOST = 'localhost'
+DB_USER = 'sup_rst'
+DB_PWD = 'sup_rst'
+DB_NAME = 'sup_rst'
+
 # init connection to database
-db = pymysql.connect(host='localhost',
-                     user='sup_rst',
-                     password='sup_rst',
-                     db='sup_rst',
-                     charset='utf8mb4',
-                     cursorclass=pymysql.cursors.DictCursor)
+db_connect = pymysql.connect(host=DB_HOST,
+                             user=DB_USER,
+                             password=DB_PWD,
+                             db=DB_NAME,
+                             charset='utf8mb4',
+                             cursorclass=pymysql.cursors.DictCursor,
+                             autocommit=True)
+
+db_cursor = db_connect.cursor()
 
 
 # check foreign key exist
 def check_foreign_key(table_name, frg_key_name, frg_table):
     # test foreign key(s)
-    with db.cursor() as cursor:
-        sql = 'SELECT `%s` FROM `%s` WHERE `%s` NOT IN (SELECT id FROM `%s`) AND `%s` != 0' \
-              % (frg_key_name, table_name, frg_key_name, frg_table, frg_key_name)
-        cursor.execute(sql)
-        key_ids = defaultdict(int)
-        for item in cursor.fetchall():
-            key_ids[item[frg_key_name]] += 1
-        for k_id in key_ids:
-            print('- found %i records with foreign key \'%s\' %i not exist' % (key_ids[k_id], frg_key_name, k_id))
+    sql = 'SELECT `%s` FROM `%s` WHERE `%s` NOT IN (SELECT id FROM `%s`) AND `%s` != 0' \
+          % (frg_key_name, table_name, frg_key_name, frg_table, frg_key_name)
+    db_cursor.execute(sql)
+    key_ids = defaultdict(int)
+    for item in db_cursor.fetchall():
+        key_ids[item[frg_key_name]] += 1
+    for k_id in key_ids:
+        print('- found %i records with foreign key \'%s\' %i not exist' % (key_ids[k_id], frg_key_name, k_id))
 
 
 # check table integrity
 def check_table_integrity(table_name):
-    with db.cursor() as cursor:
-        cursor.execute('CHECK TABLE `%s`' % table_name)
-        for msg in cursor.fetchall():
-            print('- %s %s' % (msg['Msg_type'], msg['Msg_text']))
+    db_cursor.execute('CHECK TABLE `%s`' % table_name)
+    for msg in db_cursor.fetchall():
+        print('- %s %s' % (msg['Msg_type'], msg['Msg_text']))
 
 
 # do table check list
