@@ -1,0 +1,36 @@
+#!/usr/bin/env python2
+
+import argparse
+import pymysql.cursors
+
+# some consts
+# DB
+DB_HOST = 'localhost'
+DB_USER = 'sup_rst'
+DB_PWD = 'sup_rst'
+DB_NAME = 'sup_rst'
+
+
+# parse args
+parser = argparse.ArgumentParser()
+parser.add_argument('host_id', type=int, help='ID of the host in DB')
+args = parser.parse_args()
+
+# init connection to database
+db_connect = pymysql.connect(host=DB_HOST,
+                             user=DB_USER,
+                             password=DB_PWD,
+                             db=DB_NAME,
+                             charset='utf8mb4',
+                             cursorclass=pymysql.cursors.DictCursor,
+                             autocommit=True)
+
+db_cursor = db_connect.cursor()
+
+# read hosts
+db_cursor.execute('SELECT * FROM `hosts` WHERE `id` = %i ' % args.host_id)
+hosts_data = db_cursor.fetchone()
+
+# host record
+if hosts_data:
+    print('find host "%s" at address "%s"' % (hosts_data['name'], hosts_data['hostname']))
