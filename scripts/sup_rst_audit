@@ -72,26 +72,29 @@ do_table_checks('icmp_rtt_log', 'id_host', 'hosts')
 do_table_checks('mbus', 'id_host', 'hosts')
 # sup_rst.mbus_tables
 do_table_checks('mbus_tables', 'id_host', 'hosts')
-# sup_rst.mbus_tg
-do_table_checks('mbus_tg', 'id_table', 'mbus_tables')
-# sup_rst.mbus_tg_log
-do_table_checks('mbus_tg_log', 'id_tg', 'mbus_tg')
-# sup_rst.mbus_tm
-do_table_checks('mbus_tm', 'id_table', 'mbus_tables')
-# sup_rst.mbus_tm_log
-do_table_checks('mbus_tm_log', 'id_tm', 'mbus_tm')
 # sup_rst.mbus_ts
 do_table_checks('mbus_ts', 'id_table', 'mbus_tables')
 # sup_rst.mbus_ts_log
 do_table_checks('mbus_ts_log', 'id_ts', 'mbus_ts')
-# sup_rst.mbus_v_grad
-do_table_checks('mbus_v_grad', 'id_tm', 'mbus_tm')
-# sup_rst.mbus_v_tg
-do_table_checks('mbus_v_tg', 'id_tg', 'mbus_tg')
-# sup_rst.mbus_v_tm
-do_table_checks('mbus_v_tm', 'id_tm', 'mbus_tm')
+# sup_rst.mbus_tm
+do_table_checks('mbus_tm', 'id_table', 'mbus_tables')
+# sup_rst.mbus_tm_log
+do_table_checks('mbus_tm_log', 'id_tm', 'mbus_tm')
+# sup_rst.mbus_tg
+do_table_checks('mbus_tg', 'id_table', 'mbus_tables')
+# sup_rst.mbus_tg_log
+do_table_checks('mbus_tg_log', 'id_tg', 'mbus_tg')
 # sup_rst.mbus_v_ts
 do_table_checks('mbus_v_ts', 'id_ts', 'mbus_ts')
+do_table_checks('mbus_v_ts', 'id_host', 'hosts')
+# sup_rst.mbus_v_tm
+do_table_checks('mbus_v_tm', 'id_tm', 'mbus_tm')
+do_table_checks('mbus_v_tm', 'id_host', 'hosts')
+# sup_rst.mbus_v_tg
+do_table_checks('mbus_v_tg', 'id_tg', 'mbus_tg')
+do_table_checks('mbus_v_tg', 'id_host', 'hosts')
+# sup_rst.mbus_v_grad
+do_table_checks('mbus_v_grad', 'id_tm', 'mbus_tm')
 # sup_rst.subnets
 do_table_checks('subnets')
 # sup_rst.variables
