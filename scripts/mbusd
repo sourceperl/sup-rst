@@ -1,0 +1,72 @@
+#!/usr/bin/env python2
+# poll modbus/TCP host (multi-threads for manage TCP links)
+# design to use data from/to SQL database
+
+import pymysql.cursors
+import time
+from pyModbusTCP.client import ModbusClient
+
+# some consts
+# DB
+DB_HOST = 'localhost'
+DB_USER = 'sup_rst_mbus'
+DB_PWD = 'sup_rst'
+DB_NAME = 'sup_rst'
+# misc
+MBUS_REFRESH = 30
+
+# some vars
+
+
+# some class
+class MbusNode:
+    def __init__(self, _id, hostname, port, timeout):
+        self.id = _id
+        self.client = ModbusClient(host=hostname, port=port, timeout=timeout, auto_open=True)
+        # self.client.unit_id()
+
+
+# init connection to database
+db_connect = pymysql.connect(host=DB_HOST,
+                             user=DB_USER,
+                             password=DB_PWD,
+                             db=DB_NAME,
+                             charset='utf8mb4',
+                             cursorclass=pymysql.cursors.DictCursor,
+                             autocommit=True)
+
+db_cursor = db_connect.cursor()
+
+
+# main loop
+while True:
+    # read nodes list on DB
+    sql = """\
+    SELECT
+        hosts.id AS host_id,
+        hosts.hostname AS host_hostname,
+        mbus.mbus_port AS mbus_port,
+        mbus.mbus_timeout AS mbus_mbus_timeout,
+        hosts.name AS host_name
+    FROM
+        `hosts`,
+        `mbus`,
+        `mbus_tables`
+    WHERE
+        hosts.id = mbus_tables.id_host
+    AND
+        hosts.id = mbus.id_host
+    AND
+        mbus.mbus_inhibition = \'N\'
+    AND
+        hosts.host_activity = \'Y\'
+    GROUP BY hosts.id"""
+    db_cursor.execute(sql)
+    nodes = db_cursor.fetchall()
+    # print result
+    for n in nodes:
+        print(n)
+    print('%d nodes' % len(nodes))
+    exit(0)
+    # wait before next cycle
+    time.sleep(MBUS_REFRESH)
