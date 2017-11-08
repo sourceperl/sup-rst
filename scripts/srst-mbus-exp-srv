@@ -31,8 +31,11 @@ class SupRstDB(object):
         self.close()
 
     def close(self):
-        self.db_cursor.close()
-        self.db_connect.close()
+        try:
+            self.db_cursor.close()
+            self.db_connect.close()
+        except pymysql.err.Error:
+            pass
 
     def ts(self, tag_name):
         if self.db_cursor.execute('SELECT `ts` FROM `mbus_ts` WHERE `tag` = \'%s\'' % tag_name):
