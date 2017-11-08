@@ -4,26 +4,87 @@
 
 import pymysql.cursors
 import time
-from pyModbusTCP.client import ModbusClient
+# from pyModbusTCP.client import ModbusClient
+from threading import Thread, Event
 
 # some consts
 # DB
 DB_HOST = 'localhost'
-DB_USER = 'srst-mbus-srv'
+DB_USER = 'srst-mbus'
 DB_PWD = 'sup_rst'
 DB_NAME = 'sup_rst'
 # misc
 MBUS_REFRESH = 30
 
-# some vars
-
 
 # some class
-class MbusNode:
-    def __init__(self, _id, hostname, port, timeout):
-        self.id = _id
-        self.client = ModbusClient(host=hostname, port=port, timeout=timeout, auto_open=True)
-        # self.client.unit_id()
+class NodeList(object):
+    nodes = {}
+    threads = {}
+
+    @staticmethod
+    def update_list(new_list):
+        # search add or update from new_list
+        for hid in new_list:
+            # host_id already exist ?
+            if hid in dict(NodeList.nodes):
+                if new_list[hid] != NodeList.nodes[hid]:
+                    NodeList._update(hid, new_list[hid])
+            else:
+                NodeList._add(hid, new_list[hid])
+        # search for nodes remove from new_list
+        for hid in dict(NodeList.nodes):
+            if hid not in new_list:
+                NodeList._remove(hid)
+
+    @staticmethod
+    def _add(hid, d_params):
+        print('add hid %i' % hid)
+        NodeList.nodes[hid] = d_params
+        # create thread
+        NodeList.threads[hid] = NodeThread(hid, 'th-hid %d' % hid)
+        NodeList.threads[hid].start()
+
+    @staticmethod
+    def _update(hid, d_params):
+        print('update hid %i' % hid)
+        NodeList.nodes[hid] = d_params
+        # update thread
+        NodeList.threads[hid].update()
+
+    @staticmethod
+    def _remove(hid):
+        print('remove hid %i' % hid)
+        del NodeList.nodes[hid]
+        # stop thread
+        NodeList.threads[hid].stop()
+
+
+class NodeThread(Thread):
+    def __init__(self, host_id, name):
+        # init thread
+        Thread.__init__(self)
+        self.daemon = True
+        # params
+        self.host_id = int(host_id)
+        self.name = str(name)
+        # private
+        self._is_run = True
+        self._end_evt = Event()
+
+    def update(self):
+        print('%s update' % self.name)
+
+    def stop(self):
+        self._is_run = False
+        self._end_evt.set()
+
+    def run(self):
+        print('%s start' % self.name)
+        while self._is_run:
+            print('%s read' % self.name)
+            self._end_evt.wait(MBUS_REFRESH)
+        print('%s stop' % self.name)
 
 
 # init connection to database
@@ -34,14 +95,12 @@ db_connect = pymysql.connect(host=DB_HOST,
                              charset='utf8mb4',
                              cursorclass=pymysql.cursors.DictCursor,
                              autocommit=True)
-
 db_cursor = db_connect.cursor()
-
 
 # main loop
 while True:
     # read nodes list on DB
-    sql = """\
+    sql = """
     SELECT
         hosts.id AS host_id,
         hosts.hostname AS host_hostname,
@@ -50,11 +109,8 @@ while True:
         hosts.name AS host_name
     FROM
         `hosts`,
-        `mbus`,
-        `mbus_tables`
+        `mbus`
     WHERE
-        hosts.id = mbus_tables.id_host
-    AND
         hosts.id = mbus.id_host
     AND
         mbus.mbus_inhibition = \'N\'
@@ -63,10 +119,13 @@ while True:
     GROUP BY hosts.id"""
     db_cursor.execute(sql)
     nodes = db_cursor.fetchall()
-    # print result
-    for n in nodes:
-        print(n)
+    # update the node list
+    node_list = {}
+    for i in nodes:
+        node_list[int(i['host_id'])] = dict(hostname=str(i['host_hostname'].encode('utf8')),
+                                            port=int(i['mbus_port']),
+                                            timeout=int(i['mbus_mbus_timeout']))
+    NodeList.update_list(node_list)
     print('%d nodes' % len(nodes))
-    exit(0)
     # wait before next cycle
-    time.sleep(MBUS_REFRESH)
+    time.sleep(1)
