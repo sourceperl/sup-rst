@@ -12,7 +12,7 @@ use Time::HiRes qw(gettimeofday);
 # Paramètres de la base de données
 my $db_host           = 'localhost';
 my $db_name           = 'sup_rst';
-my $db_user           = 'sup_rst';
+my $db_user           = 'srst-icmp-srv';
 my $db_pwd            = 'sup_rst';
 # Divers
 # Nom de l'application pour le syslog et le fichier d'alarme

@@ -1,0 +1,40 @@
+#!/usr/bin/env python2
+
+import pymysql.cursors
+import time
+import schedule
+from pyModbusTCP.client import ModbusClient
+
+
+# some consts
+# DB
+DB_HOST = 'localhost'
+DB_USER = 'srst-mbus-exp-srv'
+DB_PWD = 'sup_rst'
+DB_NAME = 'sup_rst'
+
+
+# some refresh
+def job_print_time():
+    print(time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()))
+
+
+# init connection to database
+db_connect = pymysql.connect(host=DB_HOST,
+                             user=DB_USER,
+                             password=DB_PWD,
+                             db=DB_NAME,
+                             charset='utf8mb4',
+                             cursorclass=pymysql.cursors.DictCursor,
+                             autocommit=True)
+
+db_cursor = db_connect.cursor()
+
+
+# init schedule
+schedule.every(1).minute.do(job_print_time)
+
+# main loop
+while True:
+    schedule.run_pending()
+    time.sleep(1.0)

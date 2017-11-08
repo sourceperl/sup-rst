@@ -17,7 +17,7 @@ from threading import Thread
 # some consts
 # DB
 DB_HOST = 'localhost'
-DB_USER = 'sup_rst_icmp'
+DB_USER = 'srst-icmp-srv'
 DB_PWD = 'sup_rst'
 DB_NAME = 'sup_rst'
 # misc

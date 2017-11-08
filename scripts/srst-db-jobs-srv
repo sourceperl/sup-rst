@@ -1,0 +1,71 @@
+#!/usr/bin/env python2
+
+import pymysql.cursors
+import time
+import schedule
+
+# some consts
+# DB
+DB_HOST = 'localhost'
+DB_USER = 'srst-db-jobs-srv'
+DB_PWD = 'sup_rst'
+DB_NAME = 'sup_rst'
+
+
+# some routines
+def job_print_time():
+    print(time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()))
+
+
+# call at 00h00 every day
+def job_midnight():
+    # store current ICMP index at 00h00
+    db_cursor.execute(
+        """
+        INSERT
+        INTO `icmp_index` (id_host, date_time, up_index, down_index)
+        SELECT id_host, NOW(), icmp_up_index, icmp_down_index FROM `icmp`;
+        """)
+
+    # purge alarms log
+    db_cursor.execute('DELETE FROM `alarms` WHERE (TO_DAYS(NOW()) - TO_DAYS(`date_time`)) > 365;')
+
+    # purge icmp log (365 for state, 100 days for index, 4 days for rtt)
+    db_cursor.execute('DELETE FROM `icmp_history` WHERE (TO_DAYS(NOW()) - TO_DAYS(`event_date`)) > 365;')
+    db_cursor.execute('DELETE FROM `icmp_index` WHERE (TO_DAYS(NOW()) - TO_DAYS(`date_time`)) > 100;')
+    db_cursor.execute('DELETE FROM `icmp_rtt_log` WHERE (TO_DAYS(NOW()) - TO_DAYS(`rtt_datetime`)) > 4;')
+
+    # purge modbus history (2 years for ts, 365 days for tg, 8 days for tm)
+    db_cursor.execute('DELETE FROM `mbus_ts_log` WHERE (TO_DAYS(NOW()) - TO_DAYS(`update`)) > 2 * 365;')
+    db_cursor.execute('DELETE FROM `mbus_tm_log` WHERE (TO_DAYS(NOW()) - TO_DAYS(`update`)) > 8;')
+    db_cursor.execute('DELETE FROM `mbus_tg_log` WHERE (TO_DAYS(NOW()) - TO_DAYS(`update`)) > 365;')
+
+    # optimize table (MyISAM only)
+    db_cursor.execute(
+        """
+        OPTIMIZE TABLE `alarms`, `hosts`, `icmp`, `icmp_history`, `icmp_index`,
+        `icmp_rtt_log`, `mbus`, `mbus_tables`, `mbus_tg`, `mbus_tg_log`,
+        `mbus_tm`, `mbus_tm_log`, `mbus_ts`, `mbus_ts_log`, `mbus_v_grad`, `mbus_v_tg`,
+        `mbus_v_tm`, `mbus_v_ts`, `variables`, `subnets`;
+        """)
+
+
+# init connection to database
+db_connect = pymysql.connect(host=DB_HOST,
+                             user=DB_USER,
+                             password=DB_PWD,
+                             db=DB_NAME,
+                             charset='utf8mb4',
+                             cursorclass=pymysql.cursors.DictCursor,
+                             autocommit=True)
+db_cursor = db_connect.cursor()
+
+# init schedule
+schedule.every().day.at('00:00').do(job_midnight)
+schedule.every().hour.do(job_print_time)
+schedule.every().minute.do(job_print_time)
+
+# main loop
+while True:
+    schedule.run_pending()
+    time.sleep(1.0)

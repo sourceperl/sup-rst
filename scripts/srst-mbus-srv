@@ -9,7 +9,7 @@ from pyModbusTCP.client import ModbusClient
 # some consts
 # DB
 DB_HOST = 'localhost'
-DB_USER = 'sup_rst_mbus'
+DB_USER = 'srst-mbus-srv'
 DB_PWD = 'sup_rst'
 DB_NAME = 'sup_rst'
 # misc
