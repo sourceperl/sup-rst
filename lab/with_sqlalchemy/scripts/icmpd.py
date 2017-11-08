@@ -138,7 +138,7 @@ while True:
                 icmp_log_new = IcmpRttLog(id_host = th_out['id'],
                                           rtt     = th_out['rtt'],
                                           rtt_datetime = th_out['update'])
-                session.add(icmp_log_new)
+                session._add(icmp_log_new)
             # update icmp
             c_node.icmp_fail_count = 0
             c_node.icmp_up_index  += 1
@@ -170,7 +170,7 @@ while True:
             event_new = IcmpHistory(host_id    = th_out['id'],
                                     event_type = c_node.icmp_state,
                                     event_date = th_out['update'])
-            session.add(event_new)
+            session._add(event_new)
             # alarm message edit
             state_word = "error"
             if c_node.icmp_state == u'U':

@@ -47,8 +47,8 @@ class sup_rst():
         _datetime = date_time if date_time else func.now()
         session = self.Session()
         try:
-            session.add(db.Alarm(message=message, date_time=_datetime,
-                                 id_host=id_host, daemon=daemon))
+            session._add(db.Alarm(message=message, date_time=_datetime,
+                                  id_host=id_host, daemon=daemon))
             session.commit()
         except:
             return None
@@ -77,7 +77,7 @@ class sup_rst():
                 env.tag_value = tag_value
             else:
                 # create tag
-                session.add(db.SupEnv(tag=tag, tag_value=tag_value))
+                session._add(db.SupEnv(tag=tag, tag_value=tag_value))
             session.commit()
         except:
             return None

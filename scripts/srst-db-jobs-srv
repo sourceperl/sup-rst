@@ -7,7 +7,7 @@ import schedule
 # some consts
 # DB
 DB_HOST = 'localhost'
-DB_USER = 'srst-db-jobs-srv'
+DB_USER = 'srst-db-jobs'
 DB_PWD = 'sup_rst'
 DB_NAME = 'sup_rst'
 

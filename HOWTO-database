@@ -2,18 +2,18 @@ SQL code to activate sup_rst with this user on MySQL sever:
 
 CREATE DATABASE `sup_rst` CHARACTER SET utf8 COLLATE utf8_general_ci;
 
-# user srst-db-jobs-srv
-GRANT USAGE ON *.* TO 'srst-db-jobs-srv'@'localhost' IDENTIFIED BY PASSWORD '*AA2343AFEF10B415D1B2D28072C9BEFAC7AED5F9';
-GRANT SELECT, INSERT, UPDATE, DELETE ON `sup\_rst`.* TO 'srst-db-jobs-srv'@'localhost';
+# user srst-db-jobs
+GRANT USAGE ON *.* TO 'srst-db-jobs'@'localhost' IDENTIFIED BY PASSWORD '*AA2343AFEF10B415D1B2D28072C9BEFAC7AED5F9';
+GRANT SELECT, INSERT, UPDATE, DELETE ON `sup\_rst`.* TO 'srst-db-jobs'@'localhost';
 
-# user srst-icmp-srv
-GRANT USAGE ON *.* TO 'srst-icmp-srv'@'localhost' IDENTIFIED BY PASSWORD '*AA2343AFEF10B415D1B2D28072C9BEFAC7AED5F9';
-GRANT SELECT, INSERT, UPDATE, DELETE ON `sup\_rst`.* TO 'srst-icmp-srv'@'localhost';
+# user srst-icmp
+GRANT USAGE ON *.* TO 'srst-icmp'@'localhost' IDENTIFIED BY PASSWORD '*AA2343AFEF10B415D1B2D28072C9BEFAC7AED5F9';
+GRANT SELECT, INSERT, UPDATE, DELETE ON `sup\_rst`.* TO 'srst-icmp'@'localhost';
 
-# user srst-mbus-srv
-GRANT USAGE ON *.* TO 'srst-mbus-srv'@'localhost' IDENTIFIED BY PASSWORD '*AA2343AFEF10B415D1B2D28072C9BEFAC7AED5F9';
-GRANT SELECT, INSERT, UPDATE, DELETE ON `sup\_rst`.* TO 'srst-mbus-srv'@'localhost';
+# user srst-mbus
+GRANT USAGE ON *.* TO 'srst-mbus'@'localhost' IDENTIFIED BY PASSWORD '*AA2343AFEF10B415D1B2D28072C9BEFAC7AED5F9';
+GRANT SELECT, INSERT, UPDATE, DELETE ON `sup\_rst`.* TO 'srst-mbus'@'localhost';
 
-# user srst-mbus-exp-srv
-GRANT USAGE ON *.* TO 'srst-mbus-exp-srv'@'localhost' IDENTIFIED BY PASSWORD '*AA2343AFEF10B415D1B2D28072C9BEFAC7AED5F9';
-GRANT SELECT ON `sup\_rst`.* TO 'srst-mbus-exp-srv'@'localhost';
+# user srst-mbus-exp
+GRANT USAGE ON *.* TO 'srst-mbus-exp'@'localhost' IDENTIFIED BY PASSWORD '*AA2343AFEF10B415D1B2D28072C9BEFAC7AED5F9';
+GRANT SELECT ON `sup\_rst`.* TO 'srst-mbus-exp'@'localhost';
