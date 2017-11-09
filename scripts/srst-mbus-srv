@@ -2,18 +2,18 @@
 # poll modbus/TCP host (multi-threads for manage TCP links)
 # design to use data from/to SQL database
 
-import pymysql.cursors
-import time
+from pySupRST import SupRstDB
 from pyModbusTCP.client import ModbusClient
+import time
 from threading import Thread, Event, Lock
 
 # some consts
 # DB
-DB_HOST = 'localhost'
 DB_USER = 'srst-mbus'
 DB_PWD = 'sup_rst'
 DB_NAME = 'sup_rst'
 # misc
+PROCESS_NAME = 'mbus'
 MBUS_REFRESH = 30
 
 
@@ -99,44 +99,40 @@ class NodeThread(Thread):
 
 
 # init connection to database
-db_connect = pymysql.connect(host=DB_HOST,
-                             user=DB_USER,
-                             password=DB_PWD,
-                             db=DB_NAME,
-                             charset='utf8mb4',
-                             cursorclass=pymysql.cursors.DictCursor,
-                             autocommit=True)
-db_cursor = db_connect.cursor()
-
-# main loop
-while True:
-    # read nodes list on DB
-    sql = """
-    SELECT
-        hosts.id AS host_id,
-        hosts.hostname AS host_hostname,
-        mbus.mbus_port AS mbus_port,
-        mbus.mbus_timeout AS mbus_mbus_timeout,
-        hosts.name AS host_name
-    FROM
-        `hosts`,
-        `mbus`
-    WHERE
-        hosts.id = mbus.id_host
-    AND
-        mbus.mbus_inhibition = \'N\'
-    AND
-        hosts.host_activity = \'Y\'
-    GROUP BY hosts.id"""
-    db_cursor.execute(sql)
-    nodes = db_cursor.fetchall()
-    # update the node list
-    node_list = {}
-    for i in nodes:
-        node_list[int(i['host_id'])] = dict(hostname=str(i['host_hostname'].encode('utf8')),
-                                            port=int(i['mbus_port']),
-                                            timeout=int(i['mbus_mbus_timeout']))
-    NodeList.update_list(node_list)
-    print('%d nodes' % len(nodes))
-    # wait before next cycle
-    time.sleep(1)
+sup = SupRstDB(db_user=DB_USER, db_pwd=DB_PWD, process=PROCESS_NAME)
+try:
+    with sup.db.cursor() as cursor:
+        # main loop
+        while True:
+            # read nodes list on DB
+            sql = """
+            SELECT
+                hosts.id AS host_id,
+                hosts.hostname AS host_hostname,
+                mbus.mbus_port AS mbus_port,
+                mbus.mbus_timeout AS mbus_mbus_timeout,
+                hosts.name AS host_name
+            FROM
+                `hosts`,
+                `mbus`
+            WHERE
+                hosts.id = mbus.id_host
+            AND
+                mbus.mbus_inhibition = \'N\'
+            AND
+                hosts.host_activity = \'Y\'
+            GROUP BY hosts.id"""
+            cursor.execute(sql)
+            nodes = cursor.fetchall()
+            # update the node list
+            node_list = {}
+            for i in nodes:
+                node_list[int(i['host_id'])] = dict(hostname=str(i['host_hostname'].encode('utf8')),
+                                                    port=int(i['mbus_port']),
+                                                    timeout=int(i['mbus_mbus_timeout']))
+            NodeList.update_list(node_list)
+            print('%d nodes' % len(nodes))
+            # wait before next cycle
+            time.sleep(1)
+finally:
+    sup.close()

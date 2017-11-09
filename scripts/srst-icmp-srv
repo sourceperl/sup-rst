@@ -5,10 +5,10 @@
 
 # FIX avoid except in thread : can cause infinite wait ?
 
+from pySupRST import SupRstDB
 import datetime
 import os
-import pymysql.cursors
-import Queue
+import Queue as queue
 import re
 import subprocess
 import time
@@ -16,18 +16,17 @@ from threading import Thread
 
 # some consts
 # DB
-DB_HOST = 'localhost'
 DB_USER = 'srst-icmp'
 DB_PWD = 'sup_rst'
-DB_NAME = 'sup_rst'
 # misc
+PROCESS_NAME = 'icmp'
 ICMP_REFRESH = 30
 NUM_THREADS = 40
 
 # some vars
 # thread in/out queue
-queue_in = Queue.Queue()
-queue_out = Queue.Queue()
+queue_in = queue.Queue()
+queue_out = queue.Queue()
 
 
 # thread code : wraps system ping command
@@ -78,140 +77,135 @@ for i in range(NUM_THREADS):
     worker.setDaemon(True)
     worker.start()
 
-# init connection to database
-db_connect = pymysql.connect(host=DB_HOST,
-                             user=DB_USER,
-                             password=DB_PWD,
-                             db=DB_NAME,
-                             charset='utf8mb4',
-                             cursorclass=pymysql.cursors.DictCursor,
-                             autocommit=True)
-
-db_cursor = db_connect.cursor()
-
-
 # main loop
 while True:
-    # read nodes list on DB
-    sql = """\
-    SELECT
-        hosts.id AS host_id,
-        hosts.hostname AS host_hostname,
-        hosts.name AS host_name,
-        icmp.icmp_log_rtt AS icmp_log_rtt,
-        icmp.icmp_state AS icmp_state,
-        icmp.icmp_good_threshold AS icmp_good_threshold,
-        icmp.icmp_good_count AS icmp_good_count,
-        icmp.icmp_fail_threshold AS icmp_fail_threshold,
-        icmp.icmp_fail_count AS icmp_fail_count,
-        icmp.icmp_timeout AS icmp_timeout,
-        icmp.icmp_up_index AS icmp_up_index,
-        icmp.icmp_down_index AS icmp_down_index
-    FROM
-        `hosts`,
-        `icmp`
-    WHERE
-        hosts.id = icmp.id_host
-    AND
-        hosts.host_activity = \'Y\'
-    AND
-        icmp.icmp_inhibition  = \'N\'"""
-    db_cursor.execute(sql)
-    nodes = db_cursor.fetchall()
-    # save cycle start time
-    start = time.time()
-    # fill in queue with nodes params
-    for node in nodes:
-        # format db value
-        node['icmp_timeout'] = max(node['icmp_timeout'], 4)
-        # populate in queue
-        queue_in.put(node)
-    # wait until in queue empty (current cycle ending)
-    queue_in.join()
-    # save cycle end time
-    end = time.time()
-    cycle_time = max(end - start, 0)
-    # update DB
-    while True:
-        try:
-            d_node_out = queue_out.get_nowait()
-            status_change = False
-            # if current node is "up"
-            if d_node_out['thread_state'] == u'U':
-                # process RTT log
-                if d_node_out['icmp_log_rtt'] == u'Y':
-                    # log RTT to DB
-                    sql = 'INSERT INTO `icmp_rtt_log` (`id_host`, `rtt`, `rtt_datetime`) ' \
-                          'VALUES (\'%i\', \'%i\', \'%s\')' \
-                          % (d_node_out['host_id'], d_node_out['thread_rtt'],
-                             d_node_out['thread_update'].strftime('%Y-%m-%d %H:%M:%S'))
-                    db_cursor.execute(sql)
-                # update icmp
-                d_node_out['icmp_fail_count'] = 0
-                d_node_out['icmp_up_index'] += 1
-                d_node_out['icmp_rtt'] = d_node_out['thread_rtt']
-                # if node is not already "up"
-                if d_node_out['icmp_state'] != u'U':
-                    # up count++
-                    d_node_out['icmp_good_count'] += 1
-                    # up counter > threshold -> host is set "up"
-                    if d_node_out['icmp_good_count'] >= d_node_out['icmp_good_threshold']:
-                        d_node_out['icmp_state'] = u'U'
-                        d_node_out['icmp_chg_state'] = d_node_out['thread_update'].strftime('%Y-%m-%d %H:%M:%S')
-                        status_change = True
-            # if current host is "down"
-            elif d_node_out['thread_state'] == u'D':
-                d_node_out['icmp_down_index'] += 1
-                d_node_out['icmp_good_count'] = 0
-                # if node is not already "down"
-                if d_node_out['icmp_state'] != u'D':
-                    # down count++
-                    d_node_out['icmp_fail_count'] += 1
-                    # down counter > threshold -> host is set "down"
-                    if d_node_out['icmp_fail_count'] >= d_node_out['icmp_fail_threshold']:
-                        d_node_out['icmp_state'] = u'D'
-                        d_node_out['icmp_chg_state'] = d_node_out['thread_update'].strftime('%Y-%m-%d %H:%M:%S')
-                        status_change = True
-            # if current host is in "error"
-            elif d_node_out['thread_state'] == u'E':
-                if d_node_out['icmp_state'] != u'E':
-                    d_node_out['icmp_state'] = u'E'
-                    d_node_out['icmp_chg_state'] = d_node_out['thread_update'].strftime('%Y-%m-%d %H:%M:%S')
-                    status_change = True
-            # update icmp record
-            update_str = ''
-            for key_name in d_node_out:
-                if key_name.startswith(u'icmp_'):
-                    if update_str:
-                        update_str += u', '
-                    update_str += '`%s` = \'%s\'' % (key_name, d_node_out[key_name])
-            sql = u'UPDATE `icmp` SET %s WHERE `icmp`.`id_host` = %s' % (update_str, d_node_out['host_id'])
-            db_cursor.execute(sql)
-            # on status change
-            if status_change:
-                # add icmp history
-                sql = u'INSERT INTO `icmp_history` (`id_host`, `event_type`, `event_date`) ' \
-                      u'VALUES (\'%i\', \'%s\', \'%s\');' \
-                      % (d_node_out['host_id'], d_node_out['icmp_state'],
-                         d_node_out['thread_update'].strftime('%Y-%m-%d %H:%M:%S'))
-                db_cursor.execute(sql)
-                # add alarm message
-                state_word = "error"
-                if d_node_out['icmp_state'] == u'U':
-                    state_word = "up"
-                elif d_node_out['icmp_state'] == u'D':
-                    state_word = "down"
-                al_msg = 'host "%s" state: %s' % (d_node_out['host_name'], state_word)
-                sql = u'INSERT INTO `alarms` (`id_host`, `daemon`, `date_time`, `message`) ' \
-                      u'VALUES (\'%i\', \'icmpd\', \'%s\', \'%s\')' \
-                      % (d_node_out['host_id'],  d_node_out['thread_update'].strftime('%Y-%m-%d %H:%M:%S'), al_msg)
-                db_cursor.execute(sql)
-        except Queue.Empty:
-            break
-    # update stats
-    db_cursor.execute(u'REPLACE INTO `sup_rst`.`variables` (`variables`.`name` , `variables`.`value` ) '
-                      u'VALUES (\'icmp_delay\', \'%i\')' % cycle_time)
-    db_cursor.execute(u'REPLACE INTO `sup_rst`.`variables` (`variables`.`name` , `variables`.`value` ) '
-                      u'VALUES (\'icmp_update\', NOW())')
+    # init connection to database
+    sup = SupRstDB(db_user=DB_USER, db_pwd=DB_PWD, process=PROCESS_NAME)
+    try:
+        with sup.db.cursor() as cursor:
+            # read nodes list on DB
+            sql = """\
+            SELECT
+                hosts.id AS host_id,
+                hosts.hostname AS host_hostname,
+                hosts.name AS host_name,
+                icmp.icmp_log_rtt AS icmp_log_rtt,
+                icmp.icmp_state AS icmp_state,
+                icmp.icmp_good_threshold AS icmp_good_threshold,
+                icmp.icmp_good_count AS icmp_good_count,
+                icmp.icmp_fail_threshold AS icmp_fail_threshold,
+                icmp.icmp_fail_count AS icmp_fail_count,
+                icmp.icmp_timeout AS icmp_timeout,
+                icmp.icmp_up_index AS icmp_up_index,
+                icmp.icmp_down_index AS icmp_down_index
+            FROM
+                `hosts`,
+                `icmp`
+            WHERE
+                hosts.id = icmp.id_host
+            AND
+                hosts.host_activity = \'Y\'
+            AND
+                icmp.icmp_inhibition  = \'N\'"""
+            cursor.execute(sql)
+            nodes = cursor.fetchall()
+            # save cycle start time
+            start = time.time()
+            # fill in queue with nodes params
+            for node in nodes:
+                # format db value
+                node['icmp_timeout'] = max(node['icmp_timeout'], 4)
+                # populate in queue
+                queue_in.put(node)
+            # wait until in queue empty (current cycle ending)
+            queue_in.join()
+            # save cycle end time
+            end = time.time()
+            cycle_time = max(end - start, 0)
+            # update DB
+            while True:
+                try:
+                    d_node_out = queue_out.get_nowait()
+                    status_change = False
+                    # if current node is "up"
+                    if d_node_out['thread_state'] == u'U':
+                        # process RTT log
+                        if d_node_out['icmp_log_rtt'] == u'Y':
+                            # log RTT to DB
+                            sql = 'INSERT INTO `icmp_rtt_log` (`id_host`, `rtt`, `rtt_datetime`) ' \
+                                  'VALUES (\'%i\', \'%i\', \'%s\')' \
+                                  % (d_node_out['host_id'], d_node_out['thread_rtt'],
+                                     d_node_out['thread_update'].strftime('%Y-%m-%d %H:%M:%S'))
+                            cursor.execute(sql)
+                        # update icmp
+                        d_node_out['icmp_fail_count'] = 0
+                        d_node_out['icmp_up_index'] += 1
+                        d_node_out['icmp_rtt'] = d_node_out['thread_rtt']
+                        # if node is not already "up"
+                        if d_node_out['icmp_state'] != u'U':
+                            # up count++
+                            d_node_out['icmp_good_count'] += 1
+                            # up counter > threshold -> host is set "up"
+                            if d_node_out['icmp_good_count'] >= d_node_out['icmp_good_threshold']:
+                                d_node_out['icmp_state'] = u'U'
+                                d_node_out['icmp_chg_state'] = d_node_out['thread_update'].strftime('%Y-%m-%d %H:%M:%S')
+                                status_change = True
+                    # if current host is "down"
+                    elif d_node_out['thread_state'] == u'D':
+                        d_node_out['icmp_down_index'] += 1
+                        d_node_out['icmp_good_count'] = 0
+                        # if node is not already "down"
+                        if d_node_out['icmp_state'] != u'D':
+                            # down count++
+                            d_node_out['icmp_fail_count'] += 1
+                            # down counter > threshold -> host is set "down"
+                            if d_node_out['icmp_fail_count'] >= d_node_out['icmp_fail_threshold']:
+                                d_node_out['icmp_state'] = 'D'
+                                d_node_out['icmp_chg_state'] = d_node_out['thread_update'].strftime('%Y-%m-%d %H:%M:%S')
+                                status_change = True
+                    # if current host is in "error"
+                    elif d_node_out['thread_state'] == 'E':
+                        if d_node_out['icmp_state'] != 'E':
+                            d_node_out['icmp_state'] = 'E'
+                            d_node_out['icmp_chg_state'] = d_node_out['thread_update'].strftime('%Y-%m-%d %H:%M:%S')
+                            status_change = True
+                    # update icmp record
+                    update_str = ''
+                    for key_name in d_node_out:
+                        if key_name.startswith(u'icmp_'):
+                            if update_str:
+                                update_str += u', '
+                            update_str += '`%s` = \'%s\'' % (key_name, d_node_out[key_name])
+                    sql = 'UPDATE `icmp` SET %s WHERE `icmp`.`id_host` = %s' % (update_str, d_node_out['host_id'])
+                    cursor.execute(sql)
+                    # on status change
+                    if status_change:
+                        # add icmp history
+                        sql = 'INSERT INTO `icmp_history` (`id_host`, `event_type`, `event_date`) ' \
+                              'VALUES (\'%i\', \'%s\', \'%s\');' \
+                              % (d_node_out['host_id'], d_node_out['icmp_state'],
+                                 d_node_out['thread_update'].strftime('%Y-%m-%d %H:%M:%S'))
+                        cursor.execute(sql)
+                        # add alarm message
+                        state_word = "error"
+                        if d_node_out['icmp_state'] == 'U':
+                            state_word = "up"
+                        elif d_node_out['icmp_state'] == 'D':
+                            state_word = "down"
+                        al_msg = 'host "%s" state: %s' % (d_node_out['host_name'], state_word)
+                        sql = 'INSERT INTO `alarms` (`id_host`, `daemon`, `date_time`, `message`) ' \
+                              'VALUES (\'%i\', \'icmpd\', \'%s\', \'%s\')' \
+                              % (d_node_out['host_id'], d_node_out['thread_update'].strftime('%Y-%m-%d %H:%M:%S'),
+                                 al_msg)
+                        cursor.execute(sql)
+                except queue.Empty:
+                    break
+            # update stats
+            cursor.execute('REPLACE INTO `sup_rst`.`variables` (`variables`.`name` , `variables`.`value` ) '
+                           'VALUES (\'icmp_delay\', \'%i\')' % cycle_time)
+            cursor.execute('REPLACE INTO `sup_rst`.`variables` (`variables`.`name` , `variables`.`value` ) '
+                           'VALUES (\'icmp_update\', NOW())')
+    finally:
+        sup.close()
     # wait before next cycle
     time.sleep(max(ICMP_REFRESH - cycle_time, 0))

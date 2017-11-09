@@ -3,6 +3,8 @@
 from pySupRST import SupRstDB
 import argparse
 
+# TODO something is wrong here script is too long (ban SELECT IN)
+
 # some consts
 # DB
 DB_USER = 'sup_rst'
