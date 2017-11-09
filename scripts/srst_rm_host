@@ -1,8 +1,8 @@
 #!/usr/bin/env python2
 
+import pymysql.cursors
 import argparse
 from collections import OrderedDict
-import pymysql.cursors
 import sys
 
 # some consts

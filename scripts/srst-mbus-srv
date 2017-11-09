@@ -4,8 +4,8 @@
 
 import pymysql.cursors
 import time
-# from pyModbusTCP.client import ModbusClient
-from threading import Thread, Event
+from pyModbusTCP.client import ModbusClient
+from threading import Thread, Event, Lock
 
 # some consts
 # DB
@@ -42,7 +42,7 @@ class NodeList(object):
         print('add hid %i' % hid)
         NodeList.nodes[hid] = d_params
         # create thread
-        NodeList.threads[hid] = NodeThread(hid, 'th-hid %d' % hid)
+        NodeList.threads[hid] = NodeThread(NodeList.nodes[hid])
         NodeList.threads[hid].start()
 
     @staticmethod
@@ -50,7 +50,7 @@ class NodeList(object):
         print('update hid %i' % hid)
         NodeList.nodes[hid] = d_params
         # update thread
-        NodeList.threads[hid].update()
+        NodeList.threads[hid].update(NodeList.nodes[hid])
 
     @staticmethod
     def _remove(hid):
@@ -61,19 +61,28 @@ class NodeList(object):
 
 
 class NodeThread(Thread):
-    def __init__(self, host_id, name):
+    def __init__(self, node_data):
         # init thread
         Thread.__init__(self)
         self.daemon = True
-        # params
-        self.host_id = int(host_id)
-        self.name = str(name)
         # private
         self._is_run = True
         self._end_evt = Event()
+        self._node = dict(node_data)
+        self._node_lock = Lock()
 
-    def update(self):
+    def get_node(self, key):
+        with self._node_lock:
+            return self._node[key]
+
+    def set_node(self, key, value):
+        with self._node_lock:
+            self._node[key] = value
+
+    def update(self, node_data):
         print('%s update' % self.name)
+        with self._node_lock:
+            self._node = dict(node_data)
 
     def stop(self):
         self._is_run = False
@@ -81,8 +90,10 @@ class NodeThread(Thread):
 
     def run(self):
         print('%s start' % self.name)
+        ModbusClient()
         while self._is_run:
-            print('%s read' % self.name)
+            print('read "%s"' % self.get_node('hostname'))
+
             self._end_evt.wait(MBUS_REFRESH)
         print('%s stop' % self.name)
 
