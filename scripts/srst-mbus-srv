@@ -153,7 +153,7 @@ def job_mbus_polling():
                             try:
                                 if tbl['type'] == 'words':
                                     tm = int(tbl['data'][db_tm['index']])
-                                elif tbl['type'] == 'float':
+                                elif tbl['type'] == 'floats':
                                     tm = float(tbl['data'][db_tm['index']])
                                 else:
                                     raise TypeError
