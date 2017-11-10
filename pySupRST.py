@@ -42,13 +42,14 @@ class SupRstDB(object):
             # ts exist ?
             if cursor.execute('SELECT * FROM `mbus_ts` WHERE `tag` = %s', tag_name):
                 db_ts = cursor.fetchone()
-                # ts in use ?
-                if db_ts['use']:
-                    # ts error ?
-                    if ts is None:
-                        cursor.execute('UPDATE `mbus_ts` SET `error`=\'1\' '
-                                       'WHERE `id`=%s', (ts, db_ts['id']))
-                    else:
+                try:
+                    # ts in use ?
+                    if db_ts['use']:
+                        # ts error ?
+                        if ts is None:
+                            raise TypeError
+                        # ts must be a boolean
+                        ts = bool(ts)
                         # search id_host if not define as param
                         if not id_host and db_ts['id_table']:
                             if cursor.execute('SELECT `id_host` FROM `mbus_tables` '
@@ -75,27 +76,27 @@ class SupRstDB(object):
                         # update ts record
                         cursor.execute('UPDATE `mbus_ts` SET `ts`=%s, `error`=\'0\' '
                                        'WHERE `id`=%s', (ts, db_ts['id']))
+                except TypeError:
+                    cursor.execute('UPDATE `mbus_ts` SET `error`=\'1\' WHERE `id`=%s', db_ts['id'])
 
     def set_tm(self, tag_name, tm, id_host=0):
         with self.db.cursor() as cursor:
             # tm exist ?
             if cursor.execute('SELECT * FROM `mbus_tm` WHERE `tag` = %s', tag_name):
                 db_tm = cursor.fetchone()
-                # tm in use ?
-                if db_tm['use']:
-                    # tm error ?
-                    if tm is None:
-                        # update tm record
-                        cursor.execute('UPDATE `mbus_tm` SET `error`=\'1\' '
-                                       'WHERE `id`=%s', (tm, db_tm['id']))
-                    else:
+                try:
+                    # tm in use ?
+                    if db_tm['use']:
+                        # type error: None or float specials nan, -inf, +inf
+                        if tm is None or not (float('-inf') < float(tm) < float('inf')):
+                            raise TypeError
                         # search id_host if not define as param
                         if not id_host and db_tm['id_table']:
                             if cursor.execute('SELECT `id_host` FROM `mbus_tables` '
                                               'WHERE `id` = %s', db_tm['id_table']):
                                 id_host = cursor.fetchone()['id_host']
                         # "signed" option (complement for 16 bits word)
-                        if db_tm['signed']:
+                        if db_tm['signed'] and type(tm) is int:
                             # test MSB
                             if tm & (1 << (16 - 1)):
                                 tm -= 1 << 16
@@ -138,19 +139,21 @@ class SupRstDB(object):
                         # add alarm message
                         if db_tm['al'] and msg:
                             self.alarm(msg, id_host=id_host)
+                except TypeError:
+                    # update tm record
+                    cursor.execute('UPDATE `mbus_tm` SET `error`=\'1\' WHERE `id`=%s', db_tm['id'])
 
     def set_tg(self, tag_name, index):
         with self.db.cursor() as cursor:
             # ts exist ?
             if cursor.execute('SELECT * FROM `mbus_tg` WHERE `tag` = %s', tag_name):
                 db_tg = cursor.fetchone()
-                # tg in use ?
-                if db_tg['use']:
-                    # tg error ?
-                    if index is None:
-                        cursor.execute('UPDATE `mbus_tg` SET `error`=\'1\' '
-                                       'WHERE `id`=%s', db_tg['id'])
-                    else:
+                try:
+                    # tg in use ?
+                    if db_tg['use']:
+                        # tg error ?
+                        if index is None:
+                            raise TypeError
                         # tg increment
                         diff = index - db_tg['last_tg']
                         # rollover ?
@@ -163,6 +166,8 @@ class SupRstDB(object):
                         # update tg record
                         cursor.execute('UPDATE `mbus_tg` SET `tg`=`tg`+%s, `last_tg`=%s, `error`=\'0\' '
                                        'WHERE `id`=%s', (tg_inc, index, db_tg['id']))
+                except TypeError:
+                    cursor.execute('UPDATE `mbus_tg` SET `error`=\'1\' WHERE `id`=%s', db_tg['id'])
 
     def ts(self, tag_name, default=None):
         with self.db.cursor() as cursor:

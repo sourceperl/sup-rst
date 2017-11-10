@@ -4,8 +4,12 @@
 
 from pySupRST import SupRstDB
 from pyModbusTCP.client import ModbusClient
+from pyModbusTCP.utils import word_list_to_long, decode_ieee
+import schedule
 import time
-from threading import Thread, Event, Lock
+from threading import Thread, current_thread
+# py3: import queue
+import Queue as queue
 
 # some consts
 # DB
@@ -15,103 +19,54 @@ DB_NAME = 'sup_rst'
 # misc
 PROCESS_NAME = 'mbus'
 MBUS_REFRESH = 30
+NUM_THREAD = 60
+
+# some vars
+n_queue = queue.Queue()
+nodes_d = dict()
 
 
-# some class
-class NodeList(object):
-    nodes = {}
-    threads = {}
-
-    @staticmethod
-    def update_list(new_list):
-        # search add or update from new_list
-        for hid in new_list:
-            # host_id already exist ?
-            if hid in dict(NodeList.nodes):
-                if new_list[hid] != NodeList.nodes[hid]:
-                    NodeList._update(hid, new_list[hid])
-            else:
-                NodeList._add(hid, new_list[hid])
-        # search for nodes remove from new_list
-        for hid in dict(NodeList.nodes):
-            if hid not in new_list:
-                NodeList._remove(hid)
-
-    @staticmethod
-    def _add(hid, d_params):
-        print('add hid %i' % hid)
-        NodeList.nodes[hid] = d_params
-        # create thread
-        NodeList.threads[hid] = NodeThread(NodeList.nodes[hid])
-        NodeList.threads[hid].start()
-
-    @staticmethod
-    def _update(hid, d_params):
-        print('update hid %i' % hid)
-        NodeList.nodes[hid] = d_params
-        # update thread
-        NodeList.threads[hid].update(NodeList.nodes[hid])
-
-    @staticmethod
-    def _remove(hid):
-        print('remove hid %i' % hid)
-        del NodeList.nodes[hid]
-        # stop thread
-        NodeList.threads[hid].stop()
+# modbus thread code
+def th_mbus_worker():
+    while True:
+        node = n_queue.get()
+        try:
+            # process all modbus tables for current node
+            for tid, t in node['tables'].items():
+                node['client'].unit_id(t['unit_id'])
+                if t['type'] == 'coils':
+                    t['data'] = node['client'].read_coils(t['address'], t['size'])
+                elif t['type'] == 'words':
+                    t['data'] = node['client'].read_holding_registers(t['address'], t['size'])
+                elif t['type'] == 'floats':
+                    regs_l = node['client'].read_holding_registers(t['address'], t['size'] * 2)
+                    if regs_l:
+                        t['data'] = list()
+                        for w_as_32b in word_list_to_long(regs_l):
+                            t['data'].append(decode_ieee(w_as_32b))
+                    else:
+                        t['data'] = None
+                else:
+                    t['data'] = None
+        except Exception as e:
+            print('except %s : %s : %s' % (current_thread().getName(), type(e), str(e)))
+        finally:
+            n_queue.task_done()
 
 
-class NodeThread(Thread):
-    def __init__(self, node_data):
-        # init thread
-        Thread.__init__(self)
-        self.daemon = True
-        # private
-        self._is_run = True
-        self._end_evt = Event()
-        self._node = dict(node_data)
-        self._node_lock = Lock()
-
-    def get_node(self, key):
-        with self._node_lock:
-            return self._node[key]
-
-    def set_node(self, key, value):
-        with self._node_lock:
-            self._node[key] = value
-
-    def update(self, node_data):
-        print('%s update' % self.name)
-        with self._node_lock:
-            self._node = dict(node_data)
-
-    def stop(self):
-        self._is_run = False
-        self._end_evt.set()
-
-    def run(self):
-        print('%s start' % self.name)
-        ModbusClient()
-        while self._is_run:
-            print('read "%s"' % self.get_node('hostname'))
-
-            self._end_evt.wait(MBUS_REFRESH)
-        print('%s stop' % self.name)
-
-
-# init connection to database
-sup = SupRstDB(db_user=DB_USER, db_pwd=DB_PWD, process=PROCESS_NAME)
-try:
-    with sup.db.cursor() as cursor:
-        # main loop
-        while True:
+def job_mbus_polling():
+    # init connection to database
+    sup = SupRstDB(db_user=DB_USER, db_pwd=DB_PWD, process=PROCESS_NAME)
+    try:
+        with sup.db.cursor() as cursor:
             # read nodes list on DB
             sql = """
             SELECT
                 hosts.id AS host_id,
-                hosts.hostname AS host_hostname,
-                mbus.mbus_port AS mbus_port,
-                mbus.mbus_timeout AS mbus_mbus_timeout,
-                hosts.name AS host_name
+                hosts.hostname AS hostname,
+                hosts.name AS name,
+                mbus.mbus_port AS port,
+                mbus.mbus_timeout AS timeout
             FROM
                 `hosts`,
                 `mbus`
@@ -123,16 +78,125 @@ try:
                 hosts.host_activity = \'Y\'
             GROUP BY hosts.id"""
             cursor.execute(sql)
-            nodes = cursor.fetchall()
-            # update the node list
-            node_list = {}
-            for i in nodes:
-                node_list[int(i['host_id'])] = dict(hostname=str(i['host_hostname'].encode('utf8')),
-                                                    port=int(i['mbus_port']),
-                                                    timeout=int(i['mbus_mbus_timeout']))
-            NodeList.update_list(node_list)
-            print('%d nodes' % len(nodes))
-            # wait before next cycle
-            time.sleep(1)
-finally:
-    sup.close()
+            # format db data
+            db_nodes = dict()
+            for col in cursor.fetchall():
+                db_nodes[col['host_id']] = dict(name=col['name'],
+                                                hostname=col['hostname'],
+                                                port=col['port'],
+                                                timeout=col['timeout'])
+            # remove node from global list if not in DB
+            for hid in nodes_d.keys():
+                if hid not in db_nodes:
+                    nodes_d[hid]['client'].close()
+                    del nodes_d[hid]
+            # update global nodes list
+            for hid, db_node in db_nodes.items():
+                # create this node if not already exist
+                if hid not in nodes_d:
+                    # add new client
+                    nodes_d[hid] = {}
+                    nodes_d[hid]['last_is_connect'] = False
+                    nodes_d[hid]['client'] = ModbusClient(auto_open=True)
+                # update client config (socket re-open only if change)
+                nodes_d[hid]['name'] = db_node['name']
+                nodes_d[hid]['client'].host(db_node['hostname'])
+                nodes_d[hid]['client'].port(db_node['port'])
+                nodes_d[hid]['client'].timeout(db_node['timeout'])
+                # update host tables
+                cursor.execute('SELECT * FROM `mbus_tables` WHERE `id_host` = %s', hid)
+                db_tables = cursor.fetchall()
+                tables = dict()
+                for db_table in db_tables:
+                    tables[db_table['id']] = {'unit_id': db_table['unit_id'],
+                                              'type': db_table['type'],
+                                              'address': db_table['address'],
+                                              'size': db_table['size']}
+                # fill nodes dict
+                nodes_d[hid]['tables'] = tables
+            print('start polling of %d nodes' % len(db_nodes))
+            # fill thread queue
+            for hid in nodes_d:
+                n_queue.put(nodes_d[hid])
+            # thread do all the modbus stuff
+            # wait all thread ends (queue is empty)
+            n_queue.join()
+            # process result store to DB
+            print('end of polling: process results')
+            for hid, node in nodes_d.items():
+                # log OK/KO status change
+                is_connect = node['client'].is_open()
+                if is_connect != node['last_is_connect']:
+                    sup.alarm('RTU "%s" link %s' % (node['name'], 'OK' if is_connect else 'KO'), id_host=hid)
+                    node['last_is_connect'] = is_connect
+                # process each modbus table
+                for tid, tbl in node['tables'].items():
+                    # status ok ?
+                    if tbl['data'] is not None:
+                        # modbus table status : good
+                        cursor.execute('UPDATE `mbus_tables` SET `status`=\'G\', `update`=NOW() WHERE `id`=%s', tid)
+                        # ts for this table
+                        cursor.execute('SELECT * FROM `mbus_ts` WHERE `id_table`=%s', tid)
+                        for db_ts in cursor.fetchall():
+                            try:
+                                if tbl['type'] == 'coils':
+                                    ts = bool(tbl['data'][db_ts['index']])
+                                elif tbl['type'] == 'words':
+                                    ts = bool(tbl['data'][db_ts['index']] & 2**db_ts['bit'])
+                                else:
+                                    raise TypeError
+                                sup.set_ts(db_ts['tag'], ts, id_host=hid)
+                            except (IndexError, TypeError):
+                                sup.set_ts(db_ts['tag'], None, id_host=hid)
+                        # tm for this table
+                        cursor.execute('SELECT * FROM `mbus_tm` WHERE `id_table`=%s', tid)
+                        for db_tm in cursor.fetchall():
+                            try:
+                                if tbl['type'] == 'words':
+                                    tm = int(tbl['data'][db_tm['index']])
+                                elif tbl['type'] == 'float':
+                                    tm = float(tbl['data'][db_tm['index']])
+                                else:
+                                    raise TypeError
+                                sup.set_tm(db_tm['tag'], tm, id_host=hid)
+                            except (IndexError, TypeError):
+                                sup.set_tm(db_tm['tag'], None, id_host=hid)
+                        # tg for this table
+                        cursor.execute('SELECT * FROM `mbus_tg` WHERE `id_table`=%s', tid)
+                        for db_tg in cursor.fetchall():
+                            try:
+                                if tbl['type'] == 'words':
+                                    tg = int(tbl['data'][db_tg['index']])
+                                else:
+                                    raise TypeError
+                                sup.set_tg(db_tg['tag'], tg)
+                            except (IndexError, TypeError):
+                                sup.set_tg(db_tg['tag'], None)
+                    else:
+                        # modbus table status : error
+                        cursor.execute('UPDATE `mbus_tables` SET `status`=\'E\', `update`=NOW() WHERE `id`=%s', tid)
+                        # ts/tm/tg status : error
+                        cursor.execute('UPDATE `mbus_ts` SET `error`=\'1\' WHERE `id_table`=%s', tid)
+                        cursor.execute('UPDATE `mbus_tm` SET `error`=\'1\' WHERE `id_table`=%s', tid)
+                        cursor.execute('UPDATE `mbus_tg` SET `error`=\'1\' WHERE `id_table`=%s', tid)
+    finally:
+        sup.close()
+
+
+if __name__ == '__main__':
+    # launch threads to process queue
+    for _ in range(NUM_THREAD):
+        worker = Thread(target=th_mbus_worker, args=())
+        worker.setDaemon(True)
+        worker.start()
+
+    # init schedule
+    schedule.every(MBUS_REFRESH).seconds.do(job_mbus_polling)
+
+    # first call at startup
+    job_mbus_polling()
+
+    # main loop
+    while True:
+        schedule.run_pending()
+        time.sleep(1.0)
