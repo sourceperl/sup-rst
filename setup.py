@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='pySupRST',
-    version='0.1.0',
+    version='0.1.1',
     description='little SCADA system',
     author='Loic Lefebvre',
     author_email='loic.celine@free.fr',
