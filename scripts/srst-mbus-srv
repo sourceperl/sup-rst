@@ -2,6 +2,7 @@
 # poll modbus/TCP host (multi-threads for manage TCP links)
 # design to use data from/to SQL database
 
+from __future__ import division
 from pySupRST import SupRstDB
 from pyModbusTCP.client import ModbusClient
 from pyModbusTCP.utils import word_list_to_long, decode_ieee
@@ -114,7 +115,6 @@ def job_mbus_polling():
                                               'size': db_table['size']}
                 # fill nodes dict
                 nodes_d[hid]['tables'] = tables
-            print('start polling of %d nodes' % len(db_nodes))
             # fill thread queue
             for hid in nodes_d:
                 n_queue.put(nodes_d[hid])
@@ -122,7 +122,6 @@ def job_mbus_polling():
             # wait all thread ends (queue is empty)
             n_queue.join()
             # process result store to DB
-            print('end of polling: process results')
             for hid, node in nodes_d.items():
                 # log OK/KO status change
                 is_connect = node['client'].is_open()

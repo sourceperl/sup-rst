@@ -1,3 +1,4 @@
+from __future__ import division
 import pymysql.cursors
 import re
 
@@ -103,6 +104,9 @@ class SupRstDB(object):
                         # scale value
                         ratio = (db_tm['gaz_max'] - db_tm['gaz_min']) / (db_tm['can_max'] - db_tm['can_min'])
                         tm = (tm - db_tm['can_min']) * ratio + db_tm['gaz_min']
+                        # TODO remove this after float web test
+                        # force int
+                        tm = int(round(tm))
                         # update tm record
                         cursor.execute('UPDATE `mbus_tm` SET `tm`=%s, `error`=\'0\' '
                                        'WHERE `id`=%s', (tm, db_tm['id']))

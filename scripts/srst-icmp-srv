@@ -3,8 +3,9 @@
 # design to use data from/to SQL database
 # use standard linux /bin/ping utility
 
-# FIX avoid except in thread : can cause infinite wait ?
+# TODO FIX avoid except in thread : can cause infinite wait ?
 
+from __future__ import division
 from pySupRST import SupRstDB
 import datetime
 import os
