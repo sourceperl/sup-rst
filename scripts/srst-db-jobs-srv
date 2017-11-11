@@ -2,6 +2,7 @@
 
 from __future__ import division
 from pySupRST import SupRstDB
+from datetime import datetime
 import math
 import schedule
 import time
@@ -61,46 +62,137 @@ def job_every_30s():
                 s = sup.strip_tags(db_v_tm['script'])
                 tm = safe_eval(s)
                 sup.set_tm(db_v_tm['tag'], tm, id_host=db_v_tm['id_host'])
+        # process TM grad
+        with sup.db.cursor() as cursor:
+            cursor.execute('SELECT'
+                           ' `mbus_tm`.`id` AS `id`,'
+                           ' `mbus_tm`.`tag` AS `tag`,'
+                           ' `mbus_tm`.`tm` AS `tm`,'
+                           ' `mbus_tm`.`label` AS `label`,'
+                           ' `mbus_tm`.`unit` AS `unit`,'
+                           ' `mbus_v_grad`.`last_tm` AS `last_tm`,'
+                           ' `mbus_v_grad`.`max_grad` AS `max_grad`,'
+                           ' `mbus_tables`.`id_host` AS `id_host` '
+                           'FROM'
+                           ' `mbus_tm`, `mbus_v_grad`, `mbus_tables` '
+                           'WHERE'
+                           ' `mbus_tm`.`id` = `mbus_v_grad`.`id_tm` '
+                           'AND'
+                           ' `mbus_tables`.`id` = `mbus_tm`.`id_table` '
+                           'AND'
+                           ' `mbus_tm`.`use` =  \'1\' '
+                           'AND'
+                           ' `mbus_v_grad`.`use` = \'1\'')
+            for db_grad in cursor.fetchall():
+                window_h = db_grad['last_tm'] + db_grad['max_grad']
+                window_l = db_grad['last_tm'] - db_grad['max_grad']
+                # edit alarm when tm is not in gradient window
+                if not window_l < db_grad['tm'] < window_h:
+                    sup.alarm('"%s" gradient (%s) -> (%s) %s'
+                              % (db_grad['label'], db_grad['last_tm'],
+                                 db_grad['tm'], db_grad['unit']),
+                              id_host=db_grad['id_host'])
+                # update "last_tm" db record
+                cursor.execute('UPDATE `mbus_v_grad` SET `last_tm`=%s '
+                               'WHERE `id_tm`=%s', (db_grad['tm'], db_grad['id']))
         # process virtual TG
-        # with sup.db.cursor() as cursor:
-        #     cursor.execute('SELECT'
-        #                    ' `mbus_tg`.`tag` AS `tag`,'
-        #                    ' `mbus_v_tg`.`script` AS `script`,'
-        #                    ' `mbus_v_tg`.`id_host` AS `id_host` '
-        #                    'FROM `mbus_tg`, `mbus_v_tg` '
-        #                    'WHERE `mbus_tg`.`id` = `mbus_v_tg`.`id_tg`')
-        #     for db_v_tg in cursor.fetchall():
-        #         s = sup.strip_tags(db_v_tg['script'])
-        #         tg = safe_eval(s)
-        #         if tg is None:
-        #             print('script = "%r"' % s)
-        #         sup.set_tg(db_v_tg['tag'], tg)
+        with sup.db.cursor() as cursor:
+            if cursor.execute('SELECT UNIX_TIMESTAMP() AS `uts`'):
+                uts = cursor.fetchone()['uts']
+                cursor.execute('SELECT'
+                               ' `mbus_tg`.`id` AS `id`,'
+                               ' `mbus_tg`.`use` AS `use`,'
+                               ' `mbus_tg`.`error` AS `error`,'
+                               ' `mbus_tg`.`tag` AS `tag`,'
+                               ' `mbus_tg`.`label` AS `label`,'
+                               ' `mbus_tg`.`tg` AS `tg`,'
+                               ' `mbus_tg`.`unit` AS `unit`,'
+                               ' `mbus_tg`.`weight` AS `weight`,'
+                               ' `mbus_v_tg`.`id_host` AS `id_host`,'
+                               ' `mbus_v_tg`.`script` AS `script`,'
+                               ' `mbus_v_tg`.`i_time` AS `i_time`,'
+                               ' `mbus_v_tg`.`c_time` AS `c_time` '
+                               'FROM'
+                               ' `mbus_tg` , `mbus_v_tg` '
+                               'WHERE'
+                               ' `mbus_tg`.`id` = `mbus_v_tg`.`id_tg` '
+                               'AND'
+                               ' `mbus_tg`.`use` =  \'1\'')
+                for db_v_tg in cursor.fetchall():
+                    val = safe_eval(sup.strip_tags(db_v_tg['script']))
+                    # check eval success
+                    if val is not None:
+                        # compute virtual tg
+                        ratio = (uts - db_v_tg['c_time']) / db_v_tg['i_time']
+                        tg = int(val * ratio * db_v_tg['weight'])
+                        # update no error and tg update
+                        cursor.execute('UPDATE `mbus_tg` SET `tg`=`tg`+%s, `error`=\'0\' '
+                                       'WHERE `id`=%s', (tg, db_v_tg['id']))
+                        # update compute time
+                        cursor.execute('UPDATE `mbus_v_tg` SET `c_time`= %s '
+                                       'WHERE `id_tg`=%s', (uts, db_v_tg['id']))
+                    else:
+                        # update error status
+                        cursor.execute('UPDATE `mbus_tg` SET `error`=\'1\' '
+                                       'WHERE `id`=%s', db_v_tg['id'])
     finally:
         sup.close()
 
 
-# some routines
-def job_every_hours():
+# call every hours at 0 min
+def job_every_xxh00():
     sup = SupRstDB(db_user=DB_USER, db_pwd=DB_PWD, process=PROCESS_NAME)
     try:
-        pass
+        # process TG for hourly and daily top
+        with sup.db.cursor() as cursor:
+            sql = """SELECT
+                `mbus_tg`.`id` AS `id`,
+                `mbus_tg`.`tag` AS `tag`,
+                `mbus_tg`.`tg` AS `tg`,
+                `mbus_tg`.`last_tg_h` AS `last_tg_h`
+            FROM
+                `mbus_tg`
+            WHERE
+                `mbus_tg`.`use` =  '1'"""
+            cursor.execute(sql)
+            for db_tg in cursor.fetchall():
+                # compute hourly tg
+                last_h_inc = db_tg['tg'] - db_tg['last_tg_h']
+                # log hourly data
+                cursor.execute('INSERT INTO `mbus_tg_log` (`id_tg` , `type`, `tg` , `update`) '
+                               'VALUES (%s, \'H\', %s, NOW())', (db_tg['id'], last_h_inc))
+                # update tg record: set hourly field to current tg value
+                cursor.execute('UPDATE `mbus_tg` SET `last_tg_h`=%s '
+                               'WHERE `id`=%s', (db_tg['tg'], db_tg['id']))
+                # process daily at 6h
+                if datetime.now().hour == 6:
+                    # log daily data
+                    cursor.execute('INSERT INTO `mbus_tg_log` (`id_tg` , `type`, `tg` , `update`) '
+                                   'VALUES (%s, \'J\', %s, NOW())', (db_tg['id'], db_tg['tg']))
+                    # update tg record: reset all fields
+                    cursor.execute('UPDATE `mbus_tg` SET `last_tg_h`=\'0\', tg=\'0\' '
+                                   'WHERE `id`=%s', db_tg['id'])
     finally:
         sup.close()
 
 
 # call at 00h00 every day
-def job_midnight():
+def job_00h00():
     sup = SupRstDB(db_user=DB_USER, db_pwd=DB_PWD, process=PROCESS_NAME)
     try:
         with sup.db.cursor() as cursor:
             # store current ICMP index at 00h00
-            cursor.execute(
-                """
-                INSERT
-                INTO `icmp_index` (id_host, date_time, up_index, down_index)
-                SELECT id_host, NOW(), icmp_up_index, icmp_down_index FROM `icmp`;
-                """)
+            cursor.execute('INSERT INTO `icmp_index` (id_host, date_time, up_index, down_index) '
+                           'SELECT id_host, NOW(), icmp_up_index, icmp_down_index FROM `icmp`;')
+    finally:
+        sup.close()
 
+
+# call at 00h05 every day
+def job_00h05():
+    sup = SupRstDB(db_user=DB_USER, db_pwd=DB_PWD, process=PROCESS_NAME)
+    try:
+        with sup.db.cursor() as cursor:
             # purge alarms log
             cursor.execute('DELETE FROM `alarms` WHERE (TO_DAYS(NOW()) - TO_DAYS(`date_time`)) > 365;')
 
@@ -115,22 +207,24 @@ def job_midnight():
             cursor.execute('DELETE FROM `mbus_tg_log` WHERE (TO_DAYS(NOW()) - TO_DAYS(`update`)) > 365;')
 
             # optimize table (MyISAM only)
-            cursor.execute(
-                """
-                OPTIMIZE TABLE `alarms`, `hosts`, `icmp`, `icmp_history`, `icmp_index`,
-                `icmp_rtt_log`, `mbus`, `mbus_tables`, `mbus_tg`, `mbus_tg_log`,
-                `mbus_tm`, `mbus_tm_log`, `mbus_ts`, `mbus_ts_log`, `mbus_v_grad`, `mbus_v_tg`,
-                `mbus_v_tm`, `mbus_v_ts`, `variables`, `subnets`;
-                """)
+            cursor.execute('OPTIMIZE TABLE '
+                           '`alarms`, `hosts`, `icmp`, `icmp_history`, `icmp_index`, '
+                           '`icmp_rtt_log`, `mbus`, `mbus_tables`, `mbus_tg`, `mbus_tg_log`, '
+                           '`mbus_tm`, `mbus_tm_log`, `mbus_ts`, `mbus_ts_log`, `mbus_v_grad`, `mbus_v_tg`, '
+                           '`mbus_v_tm`, `mbus_v_ts`, `variables`, `subnets`;')
     finally:
         sup.close()
 
 
 # init schedule
+# TODO WARN: check mysql backup hour
+for hour in range(24):
+    schedule.every().day.at('%02d:00' % hour).do(job_every_xxh00)
+schedule.every().day.at('00:00').do(job_00h00)
+schedule.every().day.at('00:05').do(job_00h05)
 schedule.every(30).seconds.do(job_every_30s)
-schedule.every().hour.do(job_every_hours)
-schedule.every().day.at('00:00').do(job_midnight)
 
+# first call at startup
 job_every_30s()
 
 # main loop
