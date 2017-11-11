@@ -2,6 +2,7 @@
 
 from __future__ import division
 from pySupRST import SupRstDB
+import math
 import schedule
 import time
 
@@ -13,11 +14,67 @@ DB_PWD = 'sup_rst'
 PROCESS_NAME = 'db_adm'
 
 
-# call every minutes
-def job_every_min():
+# some routines
+def safe_eval(eval_str):
+    try:
+        # clean eval_str
+        eval_str = eval_str.replace('\n', ' ').replace('\r', ' ')
+        # TODO remove this after syntax compatibility fix
+        # perl expr compatibility
+        eval_str = eval_str.replace('!', 'not ').replace('?', 'if').replace(':', 'else')
+        # remove all python built-in (float, len, callable, eval...)
+        glob_ctx = {'__builtins__': None}
+        # allow this function only
+        loc_ctx = {'abs': abs,
+                   'bool': bool, 'int': int, 'float': float,
+                   'sqrt': math.sqrt}
+        return eval(eval_str, glob_ctx, loc_ctx)
+    except(SyntaxError, NameError, ValueError, ZeroDivisionError):
+        return None
+
+
+# call every 30s
+def job_every_30s():
     sup = SupRstDB(db_user=DB_USER, db_pwd=DB_PWD, process=PROCESS_NAME)
     try:
-        pass
+        # process virtual TS
+        with sup.db.cursor() as cursor:
+            cursor.execute('SELECT'
+                           ' `mbus_ts`.`tag` AS `tag`,'
+                           ' `mbus_v_ts`.`script` AS `script`,'
+                           ' `mbus_v_ts`.`id_host` AS `id_host` '
+                           'FROM `mbus_ts`, `mbus_v_ts` '
+                           'WHERE `mbus_ts`.`id` = `mbus_v_ts`.`id_ts`')
+            for db_v_ts in cursor.fetchall():
+                s = sup.strip_tags(db_v_ts['script'])
+                ts = safe_eval(s)
+                sup.set_ts(db_v_ts['tag'], ts, id_host=db_v_ts['id_host'])
+        # process virtual TM
+        with sup.db.cursor() as cursor:
+            cursor.execute('SELECT'
+                           ' `mbus_tm`.`tag` AS `tag`,'
+                           ' `mbus_v_tm`.`script` AS `script`,'
+                           ' `mbus_v_tm`.`id_host` AS `id_host` '
+                           'FROM `mbus_tm`, `mbus_v_tm` '
+                           'WHERE `mbus_tm`.`id` = `mbus_v_tm`.`id_tm`')
+            for db_v_tm in cursor.fetchall():
+                s = sup.strip_tags(db_v_tm['script'])
+                tm = safe_eval(s)
+                sup.set_tm(db_v_tm['tag'], tm, id_host=db_v_tm['id_host'])
+        # process virtual TG
+        # with sup.db.cursor() as cursor:
+        #     cursor.execute('SELECT'
+        #                    ' `mbus_tg`.`tag` AS `tag`,'
+        #                    ' `mbus_v_tg`.`script` AS `script`,'
+        #                    ' `mbus_v_tg`.`id_host` AS `id_host` '
+        #                    'FROM `mbus_tg`, `mbus_v_tg` '
+        #                    'WHERE `mbus_tg`.`id` = `mbus_v_tg`.`id_tg`')
+        #     for db_v_tg in cursor.fetchall():
+        #         s = sup.strip_tags(db_v_tg['script'])
+        #         tg = safe_eval(s)
+        #         if tg is None:
+        #             print('script = "%r"' % s)
+        #         sup.set_tg(db_v_tg['tag'], tg)
     finally:
         sup.close()
 
@@ -70,9 +127,11 @@ def job_midnight():
 
 
 # init schedule
-schedule.every().minute.do(job_every_min)
+schedule.every(30).seconds.do(job_every_30s)
 schedule.every().hour.do(job_every_hours)
 schedule.every().day.at('00:00').do(job_midnight)
+
+job_every_30s()
 
 # main loop
 while True:

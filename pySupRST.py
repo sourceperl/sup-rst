@@ -190,13 +190,11 @@ class SupRstDB(object):
     def strip_tags(self, tags_str):
         # "<TM@Q_GRO>" -> "956.0"
         t = dict()
-        for (token, token_type, tag) in re.findall(r'(<(.+?)@(.+?)>)', tags_str):
+        for (token, token_type, tag) in re.findall(r'(<([A-Z]+?)@([a-zA-Z0-9_]+?)>)', tags_str):
             if token_type == 'TS':
                 t[token] = self.ts(tag, 0)
             elif token_type == 'TM':
                 t[token] = self.tm(tag, 0)
-            else:
-                return None
         for token in t:
             tags_str = re.sub(token, str(t[token]), tags_str)
         return tags_str
