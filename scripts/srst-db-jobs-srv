@@ -183,7 +183,8 @@ def job_00h00():
         with sup.db.cursor() as cursor:
             # store current ICMP index at 00h00
             cursor.execute('INSERT INTO `icmp_index` (id_host, date_time, up_index, down_index) '
-                           'SELECT id_host, NOW(), icmp_up_index, icmp_down_index FROM `icmp`;')
+                           'SELECT id_host, NOW(), icmp_up_index, icmp_down_index FROM `icmp` '
+                           'WHERE `icmp_inhibition` = \'N\';')
     finally:
         sup.close()
 
@@ -205,6 +206,14 @@ def job_00h05():
             cursor.execute('DELETE FROM `mbus_ts_log` WHERE (TO_DAYS(NOW()) - TO_DAYS(`update`)) > 2 * 365;')
             cursor.execute('DELETE FROM `mbus_tm_log` WHERE (TO_DAYS(NOW()) - TO_DAYS(`update`)) > 8;')
             cursor.execute('DELETE FROM `mbus_tg_log` WHERE (TO_DAYS(NOW()) - TO_DAYS(`update`)) > 365;')
+
+            # delete orphan id in ts/tm/tg log
+            cursor.execute('DELETE FROM `mbus_ts_log` '
+                           'WHERE `id_ts` NOT IN (SELECT `id` FROM `mbus_ts`);')
+            cursor.execute('DELETE FROM `mbus_tm_log` '
+                           'WHERE `id_tm` NOT IN (SELECT `id` FROM `mbus_tm`);')
+            cursor.execute('DELETE FROM `mbus_tg_log` '
+                           'WHERE `id_tg` NOT IN (SELECT `id` FROM `mbus_tg`);')
 
             # optimize table (MyISAM only)
             cursor.execute('OPTIMIZE TABLE '

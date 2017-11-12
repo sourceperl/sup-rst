@@ -3,8 +3,6 @@
 from pySupRST import SupRstDB
 import argparse
 
-# TODO something is wrong here script is too long (ban SELECT IN)
-
 # some consts
 # DB
 DB_USER = 'sup_rst'
@@ -42,26 +40,17 @@ try:
         # read tables with "id_table" as foreign key
         for i in ('ts', 'tm', 'tg'):
             t = 'mbus_%s' % i
-            t_log = 'mbus_%s_log' % i
             # mbus table
             cursor.execute('SELECT COUNT(*) AS row_nb FROM `%s` '
                            'WHERE `%s`.`id_table` IN '
                            '(SELECT `id` FROM `mbus_tables` WHERE `id_host` = %i)' % (t, t, args.host_id))
             tables[t] = cursor.fetchone().get('row_nb', 0)
-            # mbus log table
-            cursor.execute('SELECT COUNT(*) AS row_nb FROM `%s` '
-                           'WHERE `%s`.`id_%s` IN '
-                           '(SELECT `id` FROM `%s` '
-                           'WHERE `%s`.`id_table` IN '
-                           '(SELECT `id` FROM `mbus_tables` '
-                           'WHERE `id_host` = %i))' % (t_log, t_log, i, t, t, args.host_id))
-            tables[t_log] = cursor.fetchone().get('row_nb', 0)
 
         # display table info
         print('tables list for host ID %i:' % args.host_id)
         for name in ('alarms', 'icmp', 'icmp_history', 'icmp_index', 'icmp_rtt_log',
-                     'mbus', 'mbus_tables', 'mbus_ts', 'mbus_ts_log', 'mbus_tm', 'mbus_tm_log',
-                     'mbus_tg', 'mbus_tg_log', 'mbus_v_ts', 'mbus_v_tm', 'mbus_v_grad', 'mbus_v_tg'):
+                     'mbus', 'mbus_tables', 'mbus_ts', 'mbus_tm', 'mbus_tg',
+                     'mbus_v_ts', 'mbus_v_tm', 'mbus_v_grad', 'mbus_v_tg'):
             if tables[name]:
                 print('%8i row(s) in table %s' % (tables[name], name))
         print('')
