@@ -19,6 +19,8 @@ setup(
         'scripts/srst-mbus-exp-srv',
         'scripts/srst_check_tables',
         'scripts/srst_ls_host',
+        'scripts/srst_rm_host',
+        'scripts/srst_search_host',
         'scripts/srst_whois_host',
     ],
     install_requires=[

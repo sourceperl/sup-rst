@@ -1,0 +1,33 @@
+#!/usr/bin/env python2
+
+from pySupRST import SupRstDB
+import argparse
+
+# some consts
+# DB
+DB_USER = 'srst-utils'
+DB_PWD = 'sup_rst'
+PROCESS_NAME = 'whois'
+
+
+# parse args
+parser = argparse.ArgumentParser()
+parser.add_argument('host_name', type=str, help='name of the host in DB')
+args = parser.parse_args()
+
+# init connection to database
+sup = SupRstDB(db_user=DB_USER, db_pwd=DB_PWD, process=PROCESS_NAME)
+try:
+    with sup.db.cursor() as cursor:
+        # search in hosts
+        search_str = '%%%s%%' % args.host_name
+        search_str = search_str.replace('*', '%')
+        if cursor.execute('SELECT * FROM `hosts` WHERE `name` LIKE %s', search_str):
+            # print result
+            print(u'-' * 38)
+            print(u'{:<30s} {:>5s}'.format(u'Name', u'Id'))
+            print(u'-' * 38)
+            for h in cursor.fetchall():
+                print(u'{:<30s} {:>5d}'.format(h['name'], h['id']))
+finally:
+    sup.close()

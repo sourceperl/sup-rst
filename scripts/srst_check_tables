@@ -5,10 +5,11 @@ from collections import defaultdict
 
 # some consts
 # DB
-DB_USER = 'sup_rst'
+DB_USER = 'srst-utils'
 DB_PWD = 'sup_rst'
 # misc
 PROCESS_NAME = 'check'
+
 
 # check foreign key exist
 def check_foreign_key(table_name, frg_key_name, frg_table):

@@ -5,7 +5,7 @@ import argparse
 
 # some consts
 # DB
-DB_USER = 'sup_rst'
+DB_USER = 'srst-utils'
 DB_PWD = 'sup_rst'
 PROCESS_NAME = 'ls_h'
 

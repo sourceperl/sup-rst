@@ -202,18 +202,20 @@ def job_00h05():
             cursor.execute('DELETE FROM `icmp_index` WHERE (TO_DAYS(NOW()) - TO_DAYS(`date_time`)) > 100;')
             cursor.execute('DELETE FROM `icmp_rtt_log` WHERE (TO_DAYS(NOW()) - TO_DAYS(`rtt_datetime`)) > 4;')
 
+            # delete orphan id for icmp history
+            cursor.execute('DELETE FROM `icmp_history` WHERE `id_host` NOT IN (SELECT `id` FROM `hosts`);')
+            cursor.execute('DELETE FROM `icmp_index` WHERE `id_host` NOT IN (SELECT `id` FROM `hosts`);')
+            cursor.execute('DELETE FROM `icmp_rtt_log` WHERE `id_host` NOT IN (SELECT `id` FROM `hosts`);')
+
             # purge modbus history (2 years for ts, 365 days for tg, 8 days for tm)
             cursor.execute('DELETE FROM `mbus_ts_log` WHERE (TO_DAYS(NOW()) - TO_DAYS(`update`)) > 2 * 365;')
             cursor.execute('DELETE FROM `mbus_tm_log` WHERE (TO_DAYS(NOW()) - TO_DAYS(`update`)) > 8;')
             cursor.execute('DELETE FROM `mbus_tg_log` WHERE (TO_DAYS(NOW()) - TO_DAYS(`update`)) > 365;')
 
-            # delete orphan id in ts/tm/tg log
-            cursor.execute('DELETE FROM `mbus_ts_log` '
-                           'WHERE `id_ts` NOT IN (SELECT `id` FROM `mbus_ts`);')
-            cursor.execute('DELETE FROM `mbus_tm_log` '
-                           'WHERE `id_tm` NOT IN (SELECT `id` FROM `mbus_tm`);')
-            cursor.execute('DELETE FROM `mbus_tg_log` '
-                           'WHERE `id_tg` NOT IN (SELECT `id` FROM `mbus_tg`);')
+            # delete orphan id for mbus ts/tm/tg log
+            cursor.execute('DELETE FROM `mbus_ts_log` WHERE `id_ts` NOT IN (SELECT `id` FROM `mbus_ts`);')
+            cursor.execute('DELETE FROM `mbus_tm_log` WHERE `id_tm` NOT IN (SELECT `id` FROM `mbus_tm`);')
+            cursor.execute('DELETE FROM `mbus_tg_log` WHERE `id_tg` NOT IN (SELECT `id` FROM `mbus_tg`);')
 
             # optimize table (MyISAM only)
             cursor.execute('OPTIMIZE TABLE '

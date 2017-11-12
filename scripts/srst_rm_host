@@ -1,16 +1,20 @@
 #!/usr/bin/env python2
 
-import pymysql.cursors
+from pySupRST import SupRstDB
 import argparse
-from collections import OrderedDict
 import sys
 
 # some consts
 # DB
-DB_HOST = 'localhost'
-DB_USER = 'sup_rst'
+DB_USER = 'srst-utils'
 DB_PWD = 'sup_rst'
-DB_NAME = 'sup_rst'
+PROCESS_NAME = 'rm'
+
+# redefine input() for py2 compatibility
+try:
+    input = raw_input
+except NameError:
+    pass
 
 
 # some routines
@@ -37,7 +41,7 @@ def query_yes_no(question, default='yes'):
 
     while True:
         sys.stdout.write(question + prompt)
-        choice = raw_input().lower()
+        choice = input().lower()
         if default is not None and choice == '':
             return valid[default]
         elif choice in valid:
@@ -50,134 +54,56 @@ def query_yes_no(question, default='yes'):
 def do_sql(sql):
     """do SQL request and echo result"""
     print(sql)
-    # nb_row = db_cursor.execute(sql)
-    # if nb_row:
-    #     print('%i row(s) affected' % nb_row)
-    # else:
-    #     print('no row affected')
+    nb_row = cursor.execute(sql)
+    if nb_row:
+        print('%i row(s) affected' % nb_row)
+    else:
+        print('no row affected')
 
 
-def ids2sql(id_list):
-    """Convert a ID list to SQL string"""
-    return str(', '.join(['%s'] * len(id_list)) % tuple(id_list))
+# argparse validation
+def check_id_host(value):
+    i = int(value)
+    if i <= 0:
+        raise argparse.ArgumentTypeError("%s is an invalid positive int value" % value)
+    return i
 
 
 # parse args
 parser = argparse.ArgumentParser()
-parser.add_argument('host_id', type=int, help='ID of the host in DB')
+parser.add_argument('id_host', type=check_id_host, help='ID of the host in DB')
 parser.add_argument('-f', action='store_true', default=False, help='Force remove even if host is active')
 args = parser.parse_args()
 
 # init connection to database
-db_connect = pymysql.connect(host=DB_HOST,
-                             user=DB_USER,
-                             password=DB_PWD,
-                             db=DB_NAME,
-                             charset='utf8mb4',
-                             cursorclass=pymysql.cursors.DictCursor,
-                             autocommit=True)
+sup = SupRstDB(db_user=DB_USER, db_pwd=DB_PWD, process=PROCESS_NAME)
+try:
+    with sup.db.cursor() as cursor:
+        # read hosts
+        if cursor.execute('SELECT * FROM `hosts` WHERE `id` = %i ' % args.id_host):
+            hosts_data = cursor.fetchone()
+            print('find host "%s" at address "%s"' % (hosts_data['name'], hosts_data['hostname']))
+            # check host is not active
+            if not args.f:
+                if hosts_data['host_activity'] != 'N':
+                    print('host is not turn off, you must turn it off before remove it')
+                    exit(1)
 
-db_cursor = db_connect.cursor()
-
-# read hosts
-db_cursor.execute('SELECT * FROM `hosts` WHERE `id` = %i ' % args.host_id)
-hosts_data = db_cursor.fetchone()
-
-# read tables with id_host as foreign key
-tables = OrderedDict()
-for k in ('alarms', 'icmp', 'icmp_history', 'icmp_index', 'icmp_rtt_log',
-          'mbus', 'mbus_tables', 'mbus_v_ts', 'mbus_v_tm', 'mbus_v_tg',):
-    tables[k] = {}
-    tables[k]['nb'] = db_cursor.execute('SELECT * FROM `%s` WHERE `id_host` = %i' % (k, args.host_id))
-    tables[k]['data'] = db_cursor.fetchone()
-
-# search mbus items for host mbus_tables
-mbus_tables = OrderedDict()
-if tables['mbus_tables']['nb']:
-    # mbus ts
-    mbus_tables['mbus_ts'] = {}
-    mbus_tables['mbus_ts']['nb'] = db_cursor.execute('SELECT `id` FROM `mbus_ts` '
-                                                     'WHERE `mbus_ts`.`id_table` '
-                                                     'IN (SELECT `id` FROM `mbus_tables` WHERE `id_host` = %i)'
-                                                     % args.host_id)
-    mbus_tables['mbus_ts']['data'] = db_cursor.fetchall()
-    mbus_tables['mbus_ts']['ids'] = [d['id'] for d in mbus_tables['mbus_ts']['data']]
-    # mbus_ts_log
-    mbus_tables['mbus_ts_log'] = {}
-    if mbus_tables['mbus_ts']['ids']:
-        mbus_tables['mbus_ts_log']['nb'] = db_cursor.execute('SELECT `id` FROM `mbus_ts_log` '
-                                                             'WHERE `mbus_ts_log`.`id_ts` IN (%s)'
-                                                             % ids2sql(mbus_tables['mbus_ts']['ids']))
-    else:
-        mbus_tables['mbus_ts_log']['nb'] = 0
-    # mbus_v_ts
-    #mbus_tables['mbus_v_ts'] = {}
-    #mbus_tables['mbus_v_ts']['nb'] = 0
-    # mbus tm
-    mbus_tables['mbus_tm'] = {}
-    mbus_tables['mbus_tm']['nb'] = db_cursor.execute('SELECT `id` FROM `mbus_tm` '
-                                                     'WHERE `mbus_tm`.`id_table` '
-                                                     'IN (SELECT `id` FROM `mbus_tables` WHERE `id_host` = %i)'
-                                                     % args.host_id)
-    mbus_tables['mbus_tm']['data'] = db_cursor.fetchall()
-    mbus_tables['mbus_tm']['ids'] = [d['id'] for d in mbus_tables['mbus_tm']['data']]
-    # mbus_tm_log
-    mbus_tables['mbus_tm_log'] = {}
-    if mbus_tables['mbus_tm']['ids']:
-        mbus_tables['mbus_tm_log']['nb'] = db_cursor.execute('SELECT `id` FROM `mbus_tm_log` '
-                                                             'WHERE `mbus_tm_log`.`id_tm` IN (%s)'
-                                                             % ids2sql(mbus_tables['mbus_tm']['ids']))
-    else:
-        mbus_tables['mbus_tm_log']['nb'] = 0
-    # mbus tg
-    mbus_tables['mbus_tg'] = {}
-    mbus_tables['mbus_tg']['nb'] = db_cursor.execute('SELECT `id` FROM `mbus_tg` '
-                                                     'WHERE `mbus_tg`.`id_table` '
-                                                     'IN (SELECT `id` FROM `mbus_tables` WHERE `id_host` = %i)'
-                                                     % args.host_id)
-    mbus_tables['mbus_tg']['data'] = db_cursor.fetchall()
-    mbus_tables['mbus_tg']['ids'] = [d['id'] for d in mbus_tables['mbus_tg']['data']]
-    # mbus_tg_log
-    mbus_tables['mbus_tg_log'] = {}
-    if mbus_tables['mbus_tg']['ids']:
-        mbus_tables['mbus_tg_log']['nb'] = db_cursor.execute('SELECT `id` FROM `mbus_tg_log` '
-                                                             'WHERE `mbus_tg_log`.`id_tg` IN (%s)'
-                                                             % ids2sql(mbus_tables['mbus_tg']['ids']))
-    else:
-        mbus_tables['mbus_tg_log']['nb'] = 0
-
-# display table infos
-print('tables list for host ID %i:' % args.host_id)
-for name in tables:
-    if tables[name]['nb']:
-        print('%8i row(s) in table %s' % (tables[name]['nb'], name))
-        # list modbus tables item
-        if name == 'mbus_tables':
-            for mb_name in mbus_tables:
-                print('%16i row(s) in table %s' % (mbus_tables[mb_name]['nb'], mb_name))
-print('')
-
-# host record
-if hosts_data:
-    print('find host "%s" at address "%s"' % (hosts_data['name'], hosts_data['hostname']))
-    # check host is not active
-    if not args.f:
-        if hosts_data['host_activity'] != 'N':
-            print('host is not turn off, you must turn it off before remove it')
-            exit(1)
-
-# check remove ok
-if query_yes_no('remove it ?', 'no'):
-    print('do SQL DELETE:')
-    # remove tables with id_host as foreign key
-    for name in sorted(tables):
-        if tables[name]['nb']:
-            do_sql('DELETE FROM `%s` WHERE `%s`.`id_host` = \'%s\'' % (name, name, args.host_id))
-    # remove mbus tables
-    for name in sorted(mbus_tables):
-        if mbus_tables[name]['nb']:
-            do_sql('DELETE FROM `%s` WHERE `%s`.`id_host` = \'%s\'' % (name, name, args.host_id))
-    # removes hosts
-    do_sql('DELETE FROM `hosts` WHERE `hosts`.`id` = \'%s\'' % args.host_id)
-else:
-    print('abort remove')
+        # check remove ok
+        if query_yes_no('remove it ?', 'no'):
+            print('do SQL DELETE:')
+            # remove icmp tables
+            for name in ('alarms', 'icmp', 'icmp_history', 'icmp_index', 'icmp_rtt_log'):
+                do_sql('DELETE FROM `%s` WHERE `%s`.`id_host` = \'%s\'' % (name, name, args.id_host))
+            # remove mbus tables
+            for name in ('mbus_ts', 'mbus_tm', 'mbus_tg'):
+                do_sql('DELETE FROM `%s` WHERE `%s`.`id_table` '
+                       'IN (SELECT `id` FROM `mbus_tables` WHERE `id_host` = %i)' % (name, name, args.id_host))
+            for name in ('mbus_v_ts', 'mbus_v_tm', 'mbus_v_tg', 'mbus_tables', 'mbus'):
+                do_sql('DELETE FROM `%s` WHERE `%s`.`id_host` = \'%s\'' % (name, name, args.id_host))
+            # remove host
+            do_sql('DELETE FROM `hosts` WHERE `hosts`.`id` = \'%s\'' % args.id_host)
+        else:
+            print('abort remove')
+finally:
+    sup.close()
