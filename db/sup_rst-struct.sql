@@ -31,7 +31,7 @@ CREATE TABLE `alarms` (
   `message` varchar(80) NOT NULL DEFAULT '',
   PRIMARY KEY (`id`),
   KEY `date_time` (`date_time`)
-) ENGINE=MyISAM AUTO_INCREMENT=2915693 DEFAULT CHARSET=utf8;
+) ENGINE=MyISAM AUTO_INCREMENT=2917627 DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -46,7 +46,6 @@ CREATE TABLE `hosts` (
   `id_subnet` int(10) unsigned NOT NULL DEFAULT '0',
   `name` varchar(30) NOT NULL DEFAULT '',
   `hostname` varchar(30) NOT NULL DEFAULT '',
-  `host_activity` char(1) NOT NULL DEFAULT 'N',
   PRIMARY KEY (`id`)
 ) ENGINE=MyISAM AUTO_INCREMENT=410 DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -60,7 +59,7 @@ DROP TABLE IF EXISTS `icmp`;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `icmp` (
   `id_host` int(10) unsigned NOT NULL DEFAULT '0',
-  `icmp_inhibition` char(1) NOT NULL DEFAULT 'N',
+  `icmp_inhibition` tinyint(1) NOT NULL DEFAULT '0',
   `icmp_timeout` smallint(6) unsigned NOT NULL DEFAULT '4',
   `icmp_good_threshold` int(10) unsigned NOT NULL DEFAULT '2',
   `icmp_good_count` int(10) unsigned NOT NULL DEFAULT '0',
@@ -90,7 +89,7 @@ CREATE TABLE `icmp_history` (
   `event_date` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
   PRIMARY KEY (`id`),
   KEY `host_id` (`id_host`)
-) ENGINE=MyISAM AUTO_INCREMENT=135517 DEFAULT CHARSET=utf8;
+) ENGINE=MyISAM AUTO_INCREMENT=135549 DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -107,7 +106,7 @@ CREATE TABLE `icmp_index` (
   `up_index` int(10) unsigned NOT NULL DEFAULT '0',
   `down_index` int(10) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`)
-) ENGINE=MyISAM AUTO_INCREMENT=1208089 DEFAULT CHARSET=utf8;
+) ENGINE=MyISAM AUTO_INCREMENT=1208917 DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -123,7 +122,7 @@ CREATE TABLE `icmp_rtt_log` (
   `rtt` int(10) unsigned NOT NULL DEFAULT '0',
   `rtt_datetime` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
   PRIMARY KEY (`id`)
-) ENGINE=MyISAM AUTO_INCREMENT=270647299 DEFAULT CHARSET=utf8;
+) ENGINE=MyISAM AUTO_INCREMENT=270974084 DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -135,7 +134,7 @@ DROP TABLE IF EXISTS `mbus`;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `mbus` (
   `id_host` int(10) unsigned NOT NULL DEFAULT '0',
-  `mbus_inhibition` char(1) NOT NULL DEFAULT 'N',
+  `mbus_inhibition` tinyint(1) NOT NULL DEFAULT '0',
   `mbus_timeout` smallint(3) unsigned NOT NULL DEFAULT '4',
   `mbus_port` int(6) unsigned NOT NULL DEFAULT '502',
   PRIMARY KEY (`id_host`)
@@ -203,7 +202,7 @@ CREATE TABLE `mbus_tg_log` (
   `update` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
   PRIMARY KEY (`id`),
   KEY `id_tm` (`id_tg`)
-) ENGINE=MyISAM AUTO_INCREMENT=2804263 DEFAULT CHARSET=utf8;
+) ENGINE=MyISAM AUTO_INCREMENT=2806309 DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -257,7 +256,7 @@ CREATE TABLE `mbus_tm_log` (
   KEY `id_tm` (`id_tm`),
   KEY `update` (`update`),
   KEY `graph` (`id_tm`,`update`)
-) ENGINE=MyISAM AUTO_INCREMENT=306102262 DEFAULT CHARSET=utf8;
+) ENGINE=MyISAM AUTO_INCREMENT=310269817 DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -299,8 +298,10 @@ CREATE TABLE `mbus_ts_log` (
   `id_ts` int(10) unsigned NOT NULL DEFAULT '0',
   `ts` tinyint(1) NOT NULL DEFAULT '0',
   `update` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
-  PRIMARY KEY (`id`)
-) ENGINE=MyISAM AUTO_INCREMENT=1149799 DEFAULT CHARSET=utf8;
+  PRIMARY KEY (`id`),
+  KEY `id_ts` (`id_ts`),
+  KEY `update` (`update`)
+) ENGINE=MyISAM AUTO_INCREMENT=1150250 DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -418,4 +419,4 @@ CREATE TABLE `variables` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2017-11-10 21:53:10
+-- Dump completed on 2017-11-13 14:41:27
