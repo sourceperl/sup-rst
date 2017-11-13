@@ -80,6 +80,9 @@ def job_export_avion():
     l_tm.append(sup.tm('GZN_IW_MEL_90M', 0))            # @20571
     l_tm.append(sup.tm('GZN_IW_MEL_110M', 0))           # @20572
     sup.close()
+    # normalize modbus data
+    ts_mel_m = bool(ts_mel_m)
+    l_tm = [max(min(int(round(x)), 0xffff), 0x000) for x in l_tm]
     # do modbus write
     c = ModbusClient(host='163.111.181.18', unit_id=1, auto_open=True)
     c.write_single_coil(20486, ts_mel_m)
