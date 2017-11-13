@@ -73,7 +73,7 @@ do_table_checks('mbus_ts_log', 'id_ts', 'mbus_ts')
 # sup_rst.mbus_tm
 do_table_checks('mbus_tm', 'id_table', 'mbus_tables')
 # sup_rst.mbus_tm_log
-do_table_checks('mbus_tm_log', 'id_tm', 'mbus_tm')
+do_table_checks('mbus_tm_log')
 # sup_rst.mbus_tg
 do_table_checks('mbus_tg', 'id_table', 'mbus_tables')
 # sup_rst.mbus_tg_log
