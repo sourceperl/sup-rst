@@ -70,25 +70,38 @@ def check_id_host(value):
 # parse args
 parser = argparse.ArgumentParser()
 parser.add_argument('id_host', type=check_id_host, help='ID of the host in DB')
-parser.add_argument('-f', action='store_true', default=False, help='Force remove even if host is active')
+parser.add_argument('-f', action='store_true', default=False, help='Force remove even if icmp or mbus is active')
 args = parser.parse_args()
 
 # init connection to database
 sup = SupRstDB(db_user=DB_USER, db_pwd=DB_PWD, process=PROCESS_NAME)
 try:
     with sup.db.cursor() as cursor:
-        # read hosts
+        no_rm = False
+        # read host information
         if cursor.execute('SELECT * FROM `hosts` WHERE `id` = %i ' % args.id_host):
-            hosts_data = cursor.fetchone()
-            print('find host "%s" at address "%s"' % (hosts_data['name'], hosts_data['hostname']))
-            # check host is not active
-            if not args.f:
-                if hosts_data['host_activity'] != 'N':
-                    print('host is not turn off, you must turn it off before remove it')
-                    exit(1)
+            host_db = cursor.fetchone()
+            print('find host "%s" at address "%s"' % (host_db['name'], host_db['hostname']))
+        if cursor.execute('SELECT * FROM `icmp` WHERE `id_host` = %i ' % args.id_host):
+            icmp_db = cursor.fetchone()
+            if not icmp_db['icmp_inhibition']:
+                print('WARN: icmp is turn on for this host')
+                no_rm = True
+            else:
+                print('icmp is turn off for this host')
+        if cursor.execute('SELECT * FROM `mbus` WHERE `id_host` = %i ' % args.id_host):
+            mbus_db = cursor.fetchone()
+            if not mbus_db['mbus_inhibition']:
+                print('WARN: mbus is turn on for this host')
+                no_rm = True
+            else:
+                print('mbus is turn off for this host')
+        if no_rm and not args.f:
+            print('icmp and/or mbus is active for this host you must turn off before remove it (or use -f)')
+            exit(1)
 
         # check remove ok
-        if query_yes_no('remove it ?', 'no'):
+        if query_yes_no('remove ?', 'no'):
             print('do SQL DELETE:')
             # remove icmp tables
             for name in ('alarms', 'icmp', 'icmp_history', 'icmp_index', 'icmp_rtt_log'):

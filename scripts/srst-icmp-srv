@@ -109,9 +109,7 @@ while True:
             WHERE
                 hosts.id = icmp.id_host
             AND
-                hosts.host_activity = \'Y\'
-            AND
-                icmp.icmp_inhibition  = \'N\'"""
+                icmp.icmp_inhibition  = \'0\'"""
             cursor.execute(sql)
             nodes = cursor.fetchall()
             # save cycle start time

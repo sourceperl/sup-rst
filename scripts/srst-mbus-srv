@@ -77,9 +77,7 @@ def job_mbus_polling():
             WHERE
                 hosts.id = mbus.id_host
             AND
-                mbus.mbus_inhibition = \'N\'
-            AND
-                hosts.host_activity = \'Y\'
+                mbus.mbus_inhibition = \'0\'
             GROUP BY hosts.id"""
             cursor.execute(sql)
             # format db data

@@ -184,7 +184,7 @@ def job_00h00():
             # store current ICMP index at 00h00
             cursor.execute('INSERT INTO `icmp_index` (id_host, date_time, up_index, down_index) '
                            'SELECT id_host, NOW(), icmp_up_index, icmp_down_index FROM `icmp` '
-                           'WHERE `icmp_inhibition` = \'N\';')
+                           'WHERE `icmp_inhibition` = \'0\';')
     finally:
         sup.close()
 
