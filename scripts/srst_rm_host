@@ -53,12 +53,10 @@ def query_yes_no(question, default='yes'):
 
 def do_sql(sql):
     """do SQL request and echo result"""
-    print(sql)
     nb_row = cursor.execute(sql)
     if nb_row:
+        print(sql)
         print('%i row(s) affected' % nb_row)
-    else:
-        print('no row affected')
 
 
 # argparse validation
