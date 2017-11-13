@@ -5,12 +5,15 @@
 from __future__ import division
 from pySupRST import SupRstDB
 from pyModbusTCP.client import ModbusClient
-from pyModbusTCP.utils import word_list_to_long, decode_ieee
+from pyModbusTCP.utils import word_list_to_long, decode_ieee, test_bit
 import schedule
 import time
 from threading import Thread, current_thread
-# py3: import queue
-import Queue as queue
+# py2/3: import queue
+try:
+    import Queue as queue
+except ImportError:
+    import queue as queue
 
 # some consts
 # DB
@@ -141,7 +144,7 @@ def job_mbus_polling():
                                 if tbl['type'] == 'coils':
                                     ts = bool(tbl['data'][db_ts['index']])
                                 elif tbl['type'] == 'words':
-                                    ts = bool(tbl['data'][db_ts['index']] & 2**db_ts['bit'])
+                                    ts = test_bit(tbl['data'][db_ts['index']], db_ts['bit'])
                                 else:
                                     raise TypeError
                                 sup.set_ts(db_ts['tag'], ts, id_host=hid)

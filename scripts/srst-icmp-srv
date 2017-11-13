@@ -9,11 +9,15 @@ from __future__ import division
 from pySupRST import SupRstDB
 import datetime
 import os
-import Queue as queue
 import re
 import subprocess
 import time
 from threading import Thread
+# py2/3: import queue
+try:
+    import Queue as queue
+except ImportError:
+    import queue as queue
 
 # some consts
 # DB
