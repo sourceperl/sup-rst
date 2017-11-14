@@ -86,15 +86,15 @@ def job_every_30s():
             for db_grad in cursor.fetchall():
                 window_h = db_grad['last_tm'] + db_grad['max_grad']
                 window_l = db_grad['last_tm'] - db_grad['max_grad']
+                tm = int(db_grad['tm'])
+                last_tm = int(db_grad['last_tm'])
                 # edit alarm when tm is not in gradient window
                 if not window_l < db_grad['tm'] < window_h:
                     sup.alarm('"%s" gradient (%s) -> (%s) %s'
-                              % (db_grad['label'], db_grad['last_tm'],
-                                 db_grad['tm'], db_grad['unit']),
+                              % (db_grad['label'], last_tm, tm, db_grad['unit']),
                               id_host=db_grad['id_host'])
                 # update "last_tm" db record
-                cursor.execute('UPDATE `mbus_v_grad` SET `last_tm`=%s '
-                               'WHERE `id_tm`=%s', (db_grad['tm'], db_grad['id']))
+                cursor.execute('UPDATE `mbus_v_grad` SET `last_tm`=%s WHERE `id_tm`=%s', (tm, db_grad['id']))
         # process virtual TG
         with sup.db.cursor() as cursor:
             if cursor.execute('SELECT UNIX_TIMESTAMP() AS `uts`'):
