@@ -1,0 +1,109 @@
+#!/usr/bin/env python2
+
+from __future__ import print_function
+from pySupRST import SupRstDB
+import argparse
+import sys
+
+# some consts
+# DB
+DB_USER = 'srst-utils'
+DB_PWD = 'sup_rst'
+PROCESS_NAME = 'whois'
+
+
+# some routines
+def sqlify(args_l):
+    return [u'\'%s\'' % sup.db.escape_string(str(arg).decode('utf8')) for arg in args_l]
+
+
+def add_mbus_ts(tag, id_table=0, use=0, index=0, bit=0, label='', label_0='', label_1='', _not=0, info='', alarm=1):
+    args_l = sqlify((id_table, use, index, bit, tag, label, label_0, label_1, _not, info, alarm))
+    print('INSERT INTO `mbus_ts` '
+          '(`id_table`, `use`, `index`, `bit`, `tag`, `label`, `label_0`, `label_1`, `not`, `info`, `al`) '
+          'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);' %
+          tuple(args_l))
+
+
+def add_mbus_tm(tag, id_table=0, use=0, index=0, label='', unit='', info='', log=1, alarm=1):
+    args_l = sqlify((id_table, use, index, tag, label, unit, info, log, alarm))
+    print('INSERT INTO `mbus_tm` '
+          '(`id_table`, `use`, `index`, `tag`, `label`, `unit`, `info`, `log`, `al`) '
+          'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);' %
+          tuple(args_l))
+
+
+# parse args
+parser = argparse.ArgumentParser()
+parser.add_argument('name', type=str, help='name of PSLS (like "Spycker")')
+parser.add_argument('tag_prefix', type=str, help='prefix for auto-build tag (like "SPY_")')
+parser.add_argument('id_table', type=int, help='ID of the mbus table in DB')
+parser.add_argument('--status', action='store_true', default=False, help='build SQL for standard status word')
+parser.add_argument('--ts', action='store_true', default=False, help='build SQL for a word of ts')
+parser.add_argument('--tm', action='store_true', default=False, help='build SQL for tm')
+parser.add_argument('-i', '--index', type=int, default=0, help='ts or tm start index')
+parser.add_argument('-n', '--nb', type=int, default=1, help='how many ts or tm word')
+args = parser.parse_args()
+
+# init connection to database
+sup = SupRstDB(db_user=DB_USER, db_pwd=DB_PWD, process=PROCESS_NAME)
+try:
+    with sup.db.cursor() as cursor:
+        # do some tests
+        # check tag prefix exist in mbus_ts
+        if cursor.execute('SELECT * FROM `mbus_ts` WHERE `tag` LIKE %s', '%s%%' % args.tag_prefix):
+            ids_str = ''
+            for item in cursor.fetchall():
+                if ids_str:
+                    ids_str += ', '
+                ids_str += '%s' % item['id']
+            print('WARN: tag prefix already exist for mbus_ts id [%s]' % ids_str, file=sys.stderr)
+        # check tag prefix exist in mbus_tm
+        if cursor.execute('SELECT * FROM `mbus_tm` WHERE `tag` LIKE %s', '%s%%' % args.tag_prefix):
+            ids_str = ''
+            for item in cursor.fetchall():
+                if ids_str:
+                    ids_str += ', '
+                ids_str += '%s' % item['id']
+            print('WARN: tag prefix already exist for mbus_tm id [%s]' % ids_str, file=sys.stderr)
+        if args.status:
+            # add standard 7 bits of status word
+            print('############### SQL for status word ############### ')
+            add_mbus_ts(args.tag_prefix + 'CRN_1', id_table=args.id_table, index=0, bit=4,
+                        label='%s PSLS primaire' % args.name, label_1='CRN 1')
+            add_mbus_ts(args.tag_prefix + 'CRN_2', id_table=args.id_table, index=0, bit=5,
+                        label='%s PSLS primaire' % args.name, label_1='CRN 2')
+            add_mbus_ts(args.tag_prefix + 'CSR_2', id_table=args.id_table, index=0, bit=9,
+                        label='%s PSLS primaire' % args.name, label_1='CSR 2')
+            add_mbus_ts(args.tag_prefix + 'DRV', id_table=args.id_table, index=0, bit=10,
+                        label='%s PSLS driver' % args.name, label_0='NON', label_1='OUI')
+            add_mbus_ts(args.tag_prefix + 'CSR_1', id_table=args.id_table, index=0, bit=11,
+                        label='%s PSLS primaire' % args.name, label_1='CSR 1')
+            add_mbus_ts(args.tag_prefix + 'CSR_PRA', id_table=args.id_table, index=0, bit=12,
+                        label='%s PSLS primaire' % args.name, label_1='PRA')
+            add_mbus_ts(args.tag_prefix + 'MAD', id_table=args.id_table, index=0, bit=13,
+                        label='%s PSLS primaire' % args.name, label_1='MAD')
+        # build TS
+        if args.ts:
+            # add misc ts
+            print('############### SQL for misc TS ############### ')
+            for n in range(args.nb):
+                idx = args.index + n
+                print('############### TS word index %02d ############### ' % idx)
+                for bit_nb in range(15):
+                    add_mbus_ts(args.tag_prefix + 'TS_%02d_%02d' % (idx, bit_nb),
+                                id_table=args.id_table, index=idx, bit=bit_nb,
+                                label='%s TS at %d bit %d' % (args.name, idx, bit_nb),
+                                label_0='FALSE', label_1='TRUE')
+        # build TM
+        if args.tm:
+            # add misc ts
+            print('############### SQL for misc TM ############### ')
+            for n in range(args.nb):
+                idx = args.index + n
+                print('############### TM index %02d ############### ' % idx)
+                add_mbus_tm(args.tag_prefix + 'TM_%02d' % idx,
+                            id_table=args.id_table, index=idx,
+                            label='%s TM %02d' % (args.name, idx))
+finally:
+    sup.close()

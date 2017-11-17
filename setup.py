@@ -21,6 +21,7 @@ setup(
         'scripts/srst_ls_host',
         'scripts/srst_rm_host',
         'scripts/srst_search_host',
+        'scripts/srst_sql_builder',
         'scripts/srst_whois_host',
     ],
     install_requires=[
