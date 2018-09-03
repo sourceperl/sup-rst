@@ -23,11 +23,32 @@ try:
         search_str = '%%%s%%' % args.host_name
         search_str = search_str.replace('*', '%')
         if cursor.execute('SELECT * FROM `hosts` WHERE `name` LIKE %s', search_str):
+            l_hosts = cursor.fetchall()
+            # mbus/icmp is set for this host ?
+            for d_host in l_hosts:
+                d_host['icmp_set'] = 'no'
+                d_host['mbus_set'] = 'no'
+                d_host['mbus_l_tables'] = []
+                # icmp
+                if cursor.execute('SELECT * from `icmp` WHERE `id_host` = %s', d_host['id']):
+                    d_host['icmp_set'] = 'yes'
+                # mbus
+                if cursor.execute('SELECT * from `mbus` WHERE `id_host` = %s', d_host['id']):
+                    d_host['mbus_set'] = 'yes'
+                    d_host['mbus_l_tables'] = []
+                    # mbus table list
+                    if cursor.execute('SELECT * from `mbus_tables` WHERE `id_host` = %s', d_host['id']):
+                        for tbl in cursor.fetchall():
+                            d_host['mbus_l_tables'].append("%s %s" % (tbl['id'], tbl['comment']))
             # print result
-            print(u'-' * 38)
-            print(u'{:<30s} {:>5s}'.format(u'Name', u'Id'))
-            print(u'-' * 38)
-            for h in cursor.fetchall():
-                print(u'{:<30s} {:>5d}'.format(h['name'], h['id']))
+            # head part
+            print(u'-' * 80)
+            print(u'{:<30s} {:>5s} {:>5s} {:>5s} {:>5s}'.format(u'name', u'id', u'icmp', u'mbus', u'tables'))
+            print(u'-' * 80)
+            # host(s) part
+            for h in l_hosts:
+                print(u'{:<30s} {:>5d} {:>5s} {:>5s}'.format(h['name'], h['id'], h['icmp_set'], h['mbus_set']))
+                for tbl in h['mbus_l_tables']:
+                    print(u'{:<48} {:<s}'.format('', tbl))
 finally:
     sup.close()
