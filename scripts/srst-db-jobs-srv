@@ -238,20 +238,24 @@ def job_00h05():
         sup.close()
 
 
-# logging setup
-logging.basicConfig(format='%(asctime)s %(message)s')
-# init schedule
-# WARN: mysql backup (include db sup_rst) every day at 19h10 (by cron)
-for hour in range(24):
-    schedule.every().day.at('%02d:00' % hour).do(job_every_xxh00)
-schedule.every().day.at('00:00').do(job_00h00)
-schedule.every().day.at('00:05').do(job_00h05)
-schedule.every(30).seconds.do(job_every_30s)
+if __name__ == '__main__':
+    # logging setup
+    logging.basicConfig(format='%(asctime)s %(message)s')
+    logging.getLogger('schedule').propagate = False
+    logging.getLogger('schedule').addHandler(logging.NullHandler())
 
-# first call at startup
-job_every_30s()
+    # init schedule
+    # WARN: mysql backup (include db sup_rst) every day at 19h10 (by cron)
+    for hour in range(24):
+        schedule.every().day.at('%02d:00' % hour).do(job_every_xxh00)
+    schedule.every().day.at('00:00').do(job_00h00)
+    schedule.every().day.at('00:05').do(job_00h05)
+    schedule.every(30).seconds.do(job_every_30s)
 
-# main loop
-while True:
-    schedule.run_pending()
-    time.sleep(1.0)
+    # first call at startup
+    job_every_30s()
+
+    # main loop
+    while True:
+        schedule.run_pending()
+        time.sleep(1.0)

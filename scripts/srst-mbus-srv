@@ -3,6 +3,7 @@
 # design to use data from/to SQL database
 
 from __future__ import division
+import logging
 from pySupRST import SupRstDB
 from pyModbusTCP.client import ModbusClient
 from pyModbusTCP.utils import word_list_to_long, decode_ieee, test_bit
@@ -53,7 +54,7 @@ def th_mbus_worker():
                 else:
                     t['data'] = None
         except Exception as e:
-            print('except %s : %s : %s' % (current_thread().getName(), type(e), str(e)))
+            logging.error('except %s : %s : %s' % (current_thread().getName(), type(e), str(e)))
         finally:
             n_queue.task_done()
 
@@ -184,6 +185,11 @@ def job_mbus_polling():
 
 
 if __name__ == '__main__':
+    # logging setup
+    logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
+    logging.getLogger('schedule').propagate = False
+    logging.getLogger('schedule').addHandler(logging.NullHandler())
+
     # launch threads to process queue
     for _ in range(NUM_THREAD):
         worker = Thread(target=th_mbus_worker, args=())
