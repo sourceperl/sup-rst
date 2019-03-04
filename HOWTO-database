@@ -18,6 +18,10 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON `sup\_rst`.* TO 'srst-mbus'@'localhost';
 GRANT USAGE ON *.* TO 'srst-mbus-exp'@'localhost' IDENTIFIED BY PASSWORD '*AA2343AFEF10B415D1B2D28072C9BEFAC7AED5F9';
 GRANT SELECT ON `sup\_rst`.* TO 'srst-mbus-exp'@'localhost';
 
+# user srst-rest-srv
+GRANT USAGE ON *.* TO 'srst-rest-srv'@'localhost' IDENTIFIED BY PASSWORD '*AA2343AFEF10B415D1B2D28072C9BEFAC7AED5F9';
+GRANT SELECT ON `sup\_rst`.* TO 'srst-rest-srv'@'localhost';
+
 # user srst-utils
 GRANT USAGE ON *.* TO 'srst-utils'@'localhost' IDENTIFIED BY PASSWORD '*AA2343AFEF10B415D1B2D28072C9BEFAC7AED5F9';
 GRANT SELECT, INSERT, UPDATE, DELETE ON `sup\_rst`.* TO 'srst-utils'@'localhost';

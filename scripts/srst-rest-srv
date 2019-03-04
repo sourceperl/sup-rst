@@ -1,0 +1,63 @@
+#!/usr/bin/env python2
+
+# super simple HTTP REST server to interface with sup_rst
+
+from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
+import json
+import logging
+import time
+import traceback
+from pySupRST import SupRstDB
+
+# some consts
+# DB
+DB_USER = "srst-rest-srv"
+DB_PWD = "sup_rst"
+# misc
+PROCESS_NAME = "rest-srv"
+
+
+# some class
+class HttpHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        # export modbus tm
+        if self.path == "/exp_mbus_tm.json":
+            json_msg = get_json_mbus_tm()
+            if json_msg:
+                self.send_response(200)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(json_msg)
+            else:
+                self.send_response(500)
+        else:
+            self.send_response(404)
+
+    def log_message(self, format, *args):
+        return None
+
+
+# some function
+def get_json_mbus_tm():
+    try:
+        # link to SUP_RST database
+        sup = SupRstDB(db_user=DB_USER, db_pwd=DB_PWD, process=PROCESS_NAME)
+        try:
+            # format all TM values as json msg (with log turn on and no error)
+            with sup.db.cursor() as cursor:
+                cursor.execute("SELECT `tag`, `tm`, `unit` FROM `mbus_tm` WHERE `log` = '1' and `error` = '0'")
+                return json.dumps(cursor.fetchall())
+        finally:
+            sup.close()
+    except Exception:
+        logging.error(traceback.format_exc())
+        return None
+
+
+if __name__ == "__main__":
+    # logging setup
+    logging.basicConfig(format='%(asctime)s %(message)s')
+    logging.getLogger('schedule').propagate = False
+    logging.getLogger('schedule').addHandler(logging.NullHandler())
+    # start server
+    HTTPServer(("", 8080), HttpHandler).serve_forever()
