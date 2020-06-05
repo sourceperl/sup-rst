@@ -38,7 +38,7 @@ def job_export_avion():
     l_tm.append(sup.tm('AVION_WBE', 0))                 # @20546
     l_tm.append(sup.tm('AVION_HP_CO2', 0))              # @20547
     l_tm.append(sup.tm('AVION_ANC', 0))                 # @20548
-    l_tm.append(sup.tm('Q_ARL_AO_420', 0))              # @20549
+    l_tm.append(sup.tm('Q_ARL_AO', 0))                  # @20549
     # @20550/20553 : select quality source for L1 or 2 (L1 -> from A01/L2 -> from AO2)
     if ts_l1_mel_m:
         l_tm.append(sup.tm('ARL_AO1_PCS', 0))           # @20550
