@@ -1,4 +1,7 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
+
+"""Search for a host based on partial name. Display all matching with icmp and modbus conf."""
+
 
 from pySupRST import SupRstDB
 import argparse

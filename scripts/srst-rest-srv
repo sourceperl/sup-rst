@@ -1,8 +1,8 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
-# super simple HTTP REST server to interface with sup_rst
+""" Simple HTTP REST server to interface with sup_rst """
 
-from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import logging
 import traceback
@@ -18,8 +18,10 @@ PROCESS_NAME = "rest-srv"
 
 # some class
 class HttpHandler(BaseHTTPRequestHandler):
+    """ Custom HTTP request handler """
+
     def do_GET(self):
-        # export modbus tm
+        """ process HTTP GET request for exp_mbus_tm.json file """
         if self.path == "/exp_mbus_tm.json":
             json_msg = get_json_mbus_tm()
             if json_msg:
@@ -33,11 +35,13 @@ class HttpHandler(BaseHTTPRequestHandler):
             self.send_response(404)
 
     def log_message(self, format, *args):
+        """ avoid logging message on request """
         return None
 
 
 # some function
 def get_json_mbus_tm():
+    """ return all tm current value as a json message or None on error"""
     try:
         # link to SUP_RST database
         sup = SupRstDB(db_user=DB_USER, db_pwd=DB_PWD, process=PROCESS_NAME)
@@ -45,10 +49,10 @@ def get_json_mbus_tm():
             # format all TM values as json msg (with log turn on and no error)
             with sup.db.cursor() as cursor:
                 cursor.execute("SELECT `tag`, `tm`, `unit` FROM `mbus_tm` WHERE `log` = '1' and `error` = '0'")
-                return json.dumps(cursor.fetchall())
+                return json.dumps(cursor.fetchall()).encode()
         finally:
             sup.close()
-    except Exception:
+    except (Exception, ):
         logging.error(traceback.format_exc())
         return None
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # ping a list of host (multi-threads for increase speed)
 # design to use data from/to SQL database
 # use standard linux /bin/ping utility

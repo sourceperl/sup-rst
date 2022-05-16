@@ -1,8 +1,8 @@
-#!/usr/bin/env python2
-# poll modbus/TCP host (multi-threads for manage TCP links)
-# design to use data from/to SQL database
+#!/usr/bin/env python3
 
-from __future__ import division
+"""poll modbus/TCP host (multi-threads for manage TCP links)
+   design to use data from/to SQL database"""
+
 import logging
 from pySupRST import SupRstDB
 from pyModbusTCP.client import ModbusClient
@@ -10,11 +10,7 @@ from pyModbusTCP.utils import word_list_to_long, decode_ieee, test_bit
 import schedule
 import time
 from threading import Thread, current_thread
-# py2/3: import queue
-try:
-    import Queue as queue
-except ImportError:
-    import queue as queue
+import queue as queue
 
 # some consts
 # DB
@@ -31,9 +27,10 @@ n_queue = queue.Queue()
 nodes_d = dict()
 
 
-# modbus thread code
 def th_mbus_worker():
+    """ Modbus thread worker for multi-thread modbus IO job """
     while True:
+        # get current node and process it
         node = n_queue.get()
         try:
             # process all modbus tables for current node
@@ -56,10 +53,12 @@ def th_mbus_worker():
         except Exception as e:
             logging.error('except %s : %s : %s' % (current_thread().getName(), type(e), str(e)))
         finally:
+            # mark current IO task as done
             n_queue.task_done()
 
 
 def job_mbus_polling():
+    """ Modbus polling job: load conf. from db, queue requests for modbus threads and then update db with results """
     # init connection to database
     sup = SupRstDB(db_user=DB_USER, db_pwd=DB_PWD, process=PROCESS_NAME)
     try:
@@ -117,7 +116,7 @@ def job_mbus_polling():
                                               'size': db_table['size']}
                 # fill nodes dict
                 nodes_d[hid]['tables'] = tables
-            # fill thread queue
+            # fill modbus thread queue with node data
             for hid in nodes_d:
                 n_queue.put(nodes_d[hid])
             # thread do all the modbus stuff

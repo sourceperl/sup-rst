@@ -1,10 +1,18 @@
 # pySupRST
 A simple SCADA system for Python
 
-**Sv1 SUP_RST use python2 (for compat issue)**
+## Add packages
+```bash
+sudo apt install -y nmap supervisor python3-setuptools python3-pymysql \
+                    python3-requests python3-schedule
+```
 
-for setup on Sv1 do:
+## Add pySupRST
+```bash
+sudo python setup.py install
+```
 
-    sudo rm -rf build/
-    sudo rm -rf dist/
-    sudo python setup.py install
+## Supervisor setup
+```bash
+sudo cp etc/supervisor/conf.d/sup_rst.conf /etc/supervisor/conf.d/
+```

@@ -1,4 +1,6 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
+
+"""Check sup_rst db tables consistency."""
 
 from pySupRST import SupRstDB
 from collections import defaultdict
@@ -11,8 +13,9 @@ DB_PWD = 'sup_rst'
 PROCESS_NAME = 'check'
 
 
-# check foreign key exist
 def check_foreign_key(table_name, frg_key_name, frg_table):
+    """Check foreign key exist."""
+
     with sup.db.cursor() as cursor:
         # test foreign key(s)
         sql = 'SELECT `%s` FROM `%s` WHERE `%s` NOT IN (SELECT id FROM `%s`) AND `%s` != 0' \
@@ -25,16 +28,18 @@ def check_foreign_key(table_name, frg_key_name, frg_table):
             print('- found %i records with foreign key \'%s\' %i not exist' % (key_ids[k_id], frg_key_name, k_id))
 
 
-# check table integrity
 def check_table_integrity(table_name):
+    """Check table integrity."""
+
     with sup.db.cursor() as cursor:
         cursor.execute('CHECK TABLE `%s`' % table_name)
         for msg in cursor.fetchall():
             print('- %s %s' % (msg['Msg_type'], msg['Msg_text']))
 
 
-# do table check list
 def do_table_checks(table_name, frg_key_name=None, frg_table=None):
+    """Do table check list."""
+
     # check header
     print('## check \'%s\'' % table_name)
     # check foreign key exist
