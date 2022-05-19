@@ -16,7 +16,7 @@ PROCESS_NAME = 'whois'
 # some routines
 def sqlify(_str):
     """Format str for SQL usage (example: 'inject"; select...' -> 'inject\\"; select...')."""
-    return sup.db.escape_string(str(_str))
+    return '\'%s\'' % sup.db.escape_string(str(_str))
 
 
 def add_mbus_ts(tag, id_table=0, use=0, index=0, bit=0, label='', label_0='', label_1='', _not=0, info='', alarm=1):
