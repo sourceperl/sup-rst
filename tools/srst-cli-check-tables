@@ -2,15 +2,20 @@
 
 """Check sup_rst db tables consistency."""
 
-from pySupRST import SupRstDB
 from collections import defaultdict
+from configparser import ConfigParser
+from pySupRST import SupRstDB
+
 
 # some consts
-# DB
-DB_USER = 'srst-utils'
-DB_PWD = 'sup_rst'
-# misc
 PROCESS_NAME = 'check'
+
+# read config file
+cnf = ConfigParser()
+cnf.read('/etc/sup_rst/sup_rst.conf')
+# database credentials
+db_user = cnf.get('db', 'ro_user')
+db_pwd = cnf.get('db', 'ro_pass')
 
 
 def check_foreign_key(table_name, frg_key_name, frg_table):
@@ -50,7 +55,7 @@ def do_table_checks(table_name, frg_key_name=None, frg_table=None):
 
 
 # init connection to database
-sup = SupRstDB(db_user=DB_USER, db_pwd=DB_PWD, process=PROCESS_NAME)
+sup = SupRstDB(db_user=db_user, db_pwd=db_pwd, process=PROCESS_NAME)
 
 # check sup_rst tables
 print('# check all tables')

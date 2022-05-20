@@ -1,32 +1,34 @@
 #!/usr/bin/env python3
-# ping a list of host (multi-threads for increase speed)
-# design to use data from/to SQL database
-# use standard linux /bin/ping utility
+
+"""Ping a list of host (multi-threads for increase speed).
+Design to use data from/to SQL database.
+Use standard linux /bin/ping utility.
+"""
 
 # TODO FIX avoid except in thread : can cause infinite wait ?
 
-from __future__ import division
-from pySupRST import SupRstDB
+from configparser import ConfigParser
 import datetime
 import os
 import re
 import subprocess
 import time
 from threading import Thread
-# py2/3: import queue
-try:
-    import Queue as queue
-except ImportError:
-    import queue as queue
+import queue as queue
+from pySupRST import SupRstDB
+
 
 # some consts
-# DB
-DB_USER = 'srst-icmp'
-DB_PWD = 'sup_rst'
-# misc
 PROCESS_NAME = 'icmp'
 ICMP_REFRESH = 30
 NUM_THREADS = 40
+
+# read config file
+cnf = ConfigParser()
+cnf.read('/etc/sup_rst/sup_rst.conf')
+# database credentials
+db_user = cnf.get('db', 'rw_user')
+db_pwd = cnf.get('db', 'rw_pass')
 
 # some vars
 # thread in/out queue
@@ -66,7 +68,7 @@ def thread_ping():
             # ping command return 1: ping timeout
             elif ret_code == 1:
                 d_node['thread_state'] = u'D'
-            # ping command error for all other values
+            # ping command error for all others values
             else:
                 d_node['thread_state'] = u'E'
             # update output queue
@@ -85,7 +87,7 @@ for i in range(NUM_THREADS):
 # main loop
 while True:
     # init connection to database
-    sup = SupRstDB(db_user=DB_USER, db_pwd=DB_PWD, process=PROCESS_NAME)
+    sup = SupRstDB(db_user=db_user, db_pwd=db_pwd, process=PROCESS_NAME)
     try:
         with sup.db.cursor() as cursor:
             # read nodes list on DB

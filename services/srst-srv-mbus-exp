@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+
+"""Export some tags to external modbus server."""
+
+
+from configparser import ConfigParser
+from pyModbusTCP.client import ModbusClient
+import datetime
+import schedule
+import time
+from pySupRST import SupRstDB
+
+
+# some consts
+PROCESS_NAME = 'mb_exp'
+
+# read config file
+cnf = ConfigParser()
+cnf.read('/etc/sup_rst/sup_rst.conf')
+# database credentials
+db_user = cnf.get('db', 'ro_user')
+db_pwd = cnf.get('db', 'ro_pass')
+
+
+# define jobs
+def job_export_avion():
+    """Build a list of TS/TM tags and export it to "T-Box MS Avion côté zone" device."""
+    # DB sup_rst
+    sup = SupRstDB(db_user=db_user, db_pwd=db_pwd, process=PROCESS_NAME)
+    # ts
+    ts_l1_mel_m = sup.ts('ARLM_L1_M', False)
+    ts_l2_mel_m = sup.ts('ARLM_L2_M', False)
+    ts_mel_m = ts_l1_mel_m or ts_l2_mel_m
+    # tm
+    l_tm = list()
+    l_tm.append(sup.tm('TAIS_A2_PCS', 0))                  # @20536
+    l_tm.append(sup.tm('TAIS_A2_WOBBE', 0))                # @20537
+    l_tm.append(sup.tm('BLA_GRO_CO2', 0))                  # @20538
+    l_tm.append(sup.tm('TAIS_A2_ANC', 0))                  # @20539
+    l_tm.append(sup.tm('ARL_AE2_PCS', 0))                  # @20540
+    l_tm.append(sup.tm('ARL_AE2_WBE', 0))                  # @20541
+    l_tm.append(sup.tm('ARL_AE2_CO2', 0))                  # @20542
+    l_tm.append(sup.tm('Q_ARL_AE', 0))                     # @20543
+    l_tm.append(sup.tm('ARL_AE2_ANC', 0))                  # @20544
+    l_tm.append(sup.tm('AVION_PCS', 0))                    # @20545
+    l_tm.append(sup.tm('AVION_WBE', 0))                    # @20546
+    l_tm.append(sup.tm('AVION_HP_CO2', 0))                 # @20547
+    l_tm.append(sup.tm('AVION_ANC', 0))                    # @20548
+    l_tm.append(sup.tm('Q_ARL_AO', 0))                     # @20549
+    l_tm.append(sup.tm('ARL_AO2_PCS', 0))                  # @20550
+    l_tm.append(sup.tm('ARLM_WR_L2', 0))                   # @20551
+    l_tm.append(sup.tm('ARL_AO2_CO2', 0))                  # @20552
+    l_tm.append(sup.tm('ARL_AO2_ANC', 0))                  # @20553
+    # add life indicator (srv minute)
+    l_tm.append(datetime.datetime.now().minute)            # @20554
+    # Q Arleux mel.
+    l_tm.append(sup.tm('ARLM_Q', 0))                       # @20555
+    # chromato GNY
+    l_tm.append(sup.tm('ARL_GNY_PCS', 0))                  # @20556
+    l_tm.append(sup.tm('ARL_GNY_WBE', 0))                  # @20557
+    # chromato Flx Blaregnies (! Belgian values 0/25 convert to 0/0)
+    l_tm.append(sup.tm('BLA_PCS_GRO_A', 0) * 1.0026)       # @20558
+    l_tm.append(sup.tm('BLA_IW_GRO_A', 0) * 1.0026)        # @20559
+    # network pressure at Arleux injection point (17PIT18B)
+    l_tm.append(int(round(sup.tm('ARLM_P_AO1', 0)/10.0)))  # @20560
+    sup.close()
+    # normalize modbus data
+    ts_mel_m = bool(ts_mel_m)
+    l_tm = [max(min(int(round(x)), 0xffff), 0x000) for x in l_tm]
+    # do modbus write
+    c = ModbusClient(host='163.111.181.18', unit_id=1, auto_open=True)
+    c.write_single_coil(20486, ts_mel_m)
+    c.write_multiple_registers(20536, l_tm)
+    c.close()
+
+
+# init schedule
+schedule.every(1).minute.do(job_export_avion)
+
+# first call at startup
+job_export_avion()
+
+# main loop
+while True:
+    schedule.run_pending()
+    time.sleep(1.0)

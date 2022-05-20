@@ -2,15 +2,21 @@
 
 """Remove a host and all objects related to it from DB."""
 
-from pySupRST import SupRstDB
 import argparse
+from configparser import ConfigParser
 import sys
+from pySupRST import SupRstDB
+
 
 # some consts
-# DB
-DB_USER = 'srst-utils'
-DB_PWD = 'sup_rst'
 PROCESS_NAME = 'rm'
+
+# read config file
+cnf = ConfigParser()
+cnf.read('/etc/sup_rst/sup_rst.conf')
+# database credentials
+db_user = cnf.get('db', 'rw_user')
+db_pwd = cnf.get('db', 'rw_pass')
 
 
 # some routines
@@ -70,7 +76,7 @@ parser.add_argument('-f', action='store_true', default=False, help='Force remove
 args = parser.parse_args()
 
 # init connection to database
-sup = SupRstDB(db_user=DB_USER, db_pwd=DB_PWD, process=PROCESS_NAME)
+sup = SupRstDB(db_user=db_user, db_pwd=db_pwd, process=PROCESS_NAME)
 try:
     with sup.db.cursor() as cursor:
         no_rm = False

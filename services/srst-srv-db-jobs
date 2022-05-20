@@ -2,20 +2,24 @@
 
 """Do all DB stuff as cron job."""
 
-from pySupRST import SupRstDB
+from configparser import ConfigParser
 from datetime import datetime
 import logging
 import math
-import schedule
 import time
 import traceback
+import schedule
+from pySupRST import SupRstDB
 
 # some consts
-# DB
-DB_USER = 'srst-db-jobs'
-DB_PWD = 'sup_rst'
-# misc
 PROCESS_NAME = 'db_adm'
+
+# read config file
+cnf = ConfigParser()
+cnf.read('/etc/sup_rst/sup_rst.conf')
+# database credentials
+db_user = cnf.get('db', 'rw_user')
+db_pwd = cnf.get('db', 'rw_pass')
 
 
 # some routines
@@ -43,7 +47,7 @@ def safe_eval(eval_str):
 def job_every_30s():
     """Process virtual sup_rst things (v_ts, v_tm, v_tg) and create alarm message on v_grad trig."""
 
-    sup = SupRstDB(db_user=DB_USER, db_pwd=DB_PWD, process=PROCESS_NAME)
+    sup = SupRstDB(db_user=db_user, db_pwd=db_pwd, process=PROCESS_NAME)
     try:
         # process virtual TS
         with sup.db.cursor() as cursor:
@@ -152,7 +156,7 @@ def job_every_30s():
 def job_every_xxh00():
     """Process TG for hourly and daily top."""
 
-    sup = SupRstDB(db_user=DB_USER, db_pwd=DB_PWD, process=PROCESS_NAME)
+    sup = SupRstDB(db_user=db_user, db_pwd=db_pwd, process=PROCESS_NAME)
     try:
         with sup.db.cursor() as cursor:
             sql = """SELECT
@@ -192,7 +196,7 @@ def job_every_xxh00():
 def job_00h00():
     """Manage ICMP index."""
 
-    sup = SupRstDB(db_user=DB_USER, db_pwd=DB_PWD, process=PROCESS_NAME)
+    sup = SupRstDB(db_user=db_user, db_pwd=db_pwd, process=PROCESS_NAME)
     try:
         with sup.db.cursor() as cursor:
             # store current ICMP index at 00h00
@@ -209,7 +213,7 @@ def job_00h00():
 def job_00h05():
     """DB admin stuff: purge and optimize nightly tasks."""
 
-    sup = SupRstDB(db_user=DB_USER, db_pwd=DB_PWD, process=PROCESS_NAME)
+    sup = SupRstDB(db_user=db_user, db_pwd=db_pwd, process=PROCESS_NAME)
     try:
         with sup.db.cursor() as cursor:
             # purge alarms log
