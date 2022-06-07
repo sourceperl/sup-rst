@@ -13,8 +13,8 @@ setup(
         'pySupRST',
     ],
     install_requires=[
-        'schedule',
-        'pyModbusTCP',
-        'pymysql',
+        'schedule==0.6.0',
+        'pyModbusTCP==0.2.0',
+        'pymysql==0.9.3',
     ],
 )

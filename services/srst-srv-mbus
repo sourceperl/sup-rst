@@ -39,7 +39,7 @@ def th_mbus_worker():
         try:
             # process all modbus tables for current node
             for tid, t in node['tables'].items():
-                node['client'].unit_id(t['unit_id'])
+                node['client'].unit_id = t['unit_id']
                 if t['type'] == 'coils':
                     t['data'] = node['client'].read_coils(t['address'], t['size'])
                 elif t['type'] == 'words':
@@ -106,9 +106,9 @@ def job_mbus_polling():
                     nodes_d[hid]['client'] = ModbusClient(auto_open=True)
                 # update client config (socket re-open only if change)
                 nodes_d[hid]['name'] = db_node['name']
-                nodes_d[hid]['client'].host(db_node['hostname'])
-                nodes_d[hid]['client'].port(db_node['port'])
-                nodes_d[hid]['client'].timeout(db_node['timeout'])
+                nodes_d[hid]['client'].host = db_node['hostname']
+                nodes_d[hid]['client'].port = db_node['port']
+                nodes_d[hid]['client'].timeout = db_node['timeout']
                 # update host tables
                 cursor.execute('SELECT * FROM `mbus_tables` WHERE `id_host` = %s', hid)
                 db_tables = cursor.fetchall()
@@ -129,7 +129,7 @@ def job_mbus_polling():
             # process result store to DB
             for hid, node in nodes_d.items():
                 # log OK/KO status change
-                is_connect = node['client'].is_open()
+                is_connect = node['client'].is_open
                 if is_connect != node['last_is_connect']:
                     sup.alarm('RTU "%s" link %s' % (node['name'], 'OK' if is_connect else 'KO'), id_host=hid)
                     node['last_is_connect'] = is_connect
