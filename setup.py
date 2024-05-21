@@ -15,6 +15,6 @@ setup(
     install_requires=[
         'schedule==0.6.0',
         'pyModbusTCP==0.2.0',
-        'pymysql==0.9.3',
+        'pymysql==1.1.1',
     ],
 )
