@@ -4,8 +4,7 @@ setup(
     name='pySupRST',
     version='0.1.4',
     description='little SCADA system',
-    author='Loic Lefebvre',
-    author_email='loic.celine@free.fr',
+    author='Loïc Lefebvre',
     license='MIT',
     url='https://github.com/sourceperl/pySupRST',
     platforms='any',
@@ -13,8 +12,8 @@ setup(
         'pySupRST',
     ],
     install_requires=[
-        'schedule==0.6.0',
-        'pyModbusTCP==0.2.0',
+        'schedule==1.2.2',
+        'pyModbusTCP>=0.3.0',
         'pymysql==0.9.3',
     ],
 )

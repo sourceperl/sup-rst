@@ -1,23 +1,18 @@
 # pySupRST
-A simple SCADA system for Python
 
-## Setup
+A simple SCADA system for Python.
 
+# Configure apps
 
-```bash
-# add packages
-sudo apt install -y nmap supervisor python3-setuptools python3-pymysql \
-                    python3-requests python3-schedule
-# add pySupRST package
-sudo python3 setup.py install
-# copy tools
-sudo cp -v tools/* /usr/local/bin/
-```
+Each step has its own HOWTO.
 
-## Supervisor setup
-```bash
-# add services
-sudo cp -v services/* /usr/local/bin/
-# add supervisor config file
-sudo cp -v etc/supervisor/conf.d/sup_rst.conf /etc/supervisor/conf.d/
-```
+> Web server Nginx -> [README-nginx.md](README-nginx.md)
+
+> Grafana -> [README-grafana.md](README-grafana.md)
+
+> Victoriametrics -> [README-victoriametrics.md](README-victoriametrics.md)
+
+> Scada app -> [README-scada-app.md](README-scada-app.md)
+
+> IP setup -> [README-ip-setup.md](README-ip-setup.md)
+
