@@ -1,0 +1,5 @@
+# list of IP or CIDR to allow
+allow 1.1.1.1;
+allow 2001:db8:abcd:0012::/64;
+allow 1.1.0.0/16;
+deny all;

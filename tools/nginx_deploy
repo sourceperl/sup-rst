@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# abort on error
+set -e
+
+# set local and external vars
+SCRIPT_DIR=$(dirname "$0")
+NGINX_PATH="${SCRIPT_DIR}/../nginx"
+source ${SCRIPT_DIR}/ssh_infos
+
+# copy files
+rsync --progress -e="ssh -p ${PORT}" --rsync-path='sudo rsync' ${NGINX_PATH}/conf.d/security.conf ${USER}@${HOST}:/etc/nginx/conf.d/
+rsync --progress -e="ssh -p ${PORT}" --rsync-path='sudo rsync' ${NGINX_PATH}/sites-available/site.conf ${USER}@${HOST}:/etc/nginx/sites-available/
+
+# reload nginx if its safe to do it
+ssh -p ${PORT} ${USER}@${HOST} 'sudo nginx -t && sudo systemctl reload nginx.service'
