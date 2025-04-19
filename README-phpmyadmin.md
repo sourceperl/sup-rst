@@ -25,3 +25,10 @@ EOF
 unset DB_USER
 unset DB_PWD
 ```
+
+## Security hardening
+
+```bash
+# add pma_secure.php to /etc/phpmyadmin/conf.d/
+./tools/pma_deploy
+```

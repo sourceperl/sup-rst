@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# abort on error
+set -e
+
+# set local and external vars
+SCRIPT_DIR=$(dirname "$0")
+PMA_PATH="${SCRIPT_DIR}/../phpmyadmin"
+source ${SCRIPT_DIR}/ssh_infos
+
+# copy files
+rsync --progress -e="ssh -p ${PORT}" --rsync-path='sudo rsync' ${PMA_PATH}/pma_secure.php \
+      ${USER}@${HOST}:/etc/phpmyadmin/conf.d/
