@@ -1,12 +1,11 @@
 # Nginx setup
 
-## Security hardening
+## First step
 
-some recommendations here: https://protocolguard.com/resources/nginx-security-hardening/
-
-online security test: 
-* https://protocolguard.com/ 
-* https://www.immuniweb.com/websec/
+```bash
+# install nginx and PHP-FPM (PHP-FastCGI Process Manager)
+sudo apt install nginx php-fpm
+```
 
 ## Initialization of security accounts
 
@@ -77,3 +76,11 @@ goaccess /var/log/nginx/access.log --log-format=COMBINED
 # HTML report
 goaccess /var/log/nginx/access.log --log-format=COMBINED > /tmp/goaccess-report.html
 ```
+
+## Security hardening
+
+some recommendations here: https://protocolguard.com/resources/nginx-security-hardening/
+
+online security test: 
+* https://protocolguard.com/ 
+* https://www.immuniweb.com/websec/
