@@ -1,6 +1,5 @@
-from __future__ import division
-import pymysql.cursors
 import re
+import pymysql.cursors
 
 # some consts
 # DB
@@ -10,19 +9,13 @@ DB_USER = 'sup_rst'
 DB_PWD = 'sup_rst'
 
 
-# some class
-class SupRstDB(object):
-    def __init__(self, db_user=DB_USER, db_pwd=DB_PWD, process=''):
+class SupRstDB:
+    def __init__(self, db_user: str = DB_USER, db_pwd: str = DB_PWD, process: str = ''):
         # init connection to database
-        self.db = pymysql.connect(host=DB_HOST,
-                                  user=db_user,
-                                  password=db_pwd,
-                                  db=DB_NAME,
-                                  charset='utf8mb4',
-                                  cursorclass=pymysql.cursors.DictCursor,
-                                  autocommit=True)
+        self.db = pymysql.connect(host=DB_HOST, user=db_user, password=db_pwd, db=DB_NAME,
+                                  charset='utf8mb4', cursorclass=pymysql.cursors.DictCursor, autocommit=True)
         # process name (max 6 chars)
-        self.process = str(process)[:6]
+        self.process = process[:6]
 
     def __del__(self):
         self.close()
@@ -33,54 +26,56 @@ class SupRstDB(object):
         except pymysql.err.Error:
             pass
 
-    def alarm(self, msg, id_host=0):
+    def alarm(self, msg: str, id_host: int = 0):
         with self.db.cursor() as cursor:
-            cursor.execute('INSERT INTO `alarms` (`date_time`, `id_host`,`daemon`, `message`) '
+            cursor.execute('INSERT INTO `alarms` (`date_time`, `id_host`, `daemon`, `message`) '
                            'VALUES (NOW(), %s, %s, %s)', (id_host, self.process, msg))
 
-    def set_ts(self, tag_name, ts, id_host=0):
+    def set_ts(self, tag_name: str, ts: bool, id_host: int = 0):
         with self.db.cursor() as cursor:
             # ts exist ?
-            if cursor.execute('SELECT * FROM `mbus_ts` WHERE `tag` = %s', tag_name):
-                db_ts = cursor.fetchone()
+            cursor.execute('SELECT * FROM `mbus_ts` WHERE `tag` = %s', tag_name)
+            mbus_ts = cursor.fetchone()
+            if mbus_ts:
                 try:
                     # ts in use ?
-                    if db_ts['use']:
+                    if mbus_ts['use']:
                         # ts error ?
                         if ts is None:
                             raise TypeError
                         # ts must be a boolean
                         ts = bool(ts)
                         # search id_host if not define as param
-                        if not id_host and db_ts['id_table']:
-                            if cursor.execute('SELECT `id_host` FROM `mbus_tables` '
-                                              'WHERE `id` = %s', db_ts['id_table']):
-                                id_host = cursor.fetchone()['id_host']
+                        if not id_host and mbus_ts['id_table']:
+                            cursor.execute('SELECT `id_host` FROM `mbus_tables` WHERE `id` = %s', mbus_ts['id_table'])
+                            mbus_tables = cursor.fetchone()
+                            if mbus_tables:
+                                id_host = mbus_tables['id_host']
                         # "not" option
-                        if db_ts['not']:
+                        if mbus_ts['not']:
                             ts = not ts
                         # on state change
-                        if ts != db_ts['ts']:
+                        if ts != mbus_ts['ts']:
                             # add to log
                             cursor.execute('INSERT INTO `mbus_ts_log` (`id_ts`,`ts`,`update`) '
-                                           'VALUES (%s, %s, NOW())', (db_ts['id'], ts))
+                                           'VALUES (%s, %s, NOW())', (mbus_ts['id'], ts))
                             # edit alarm message ?
-                            if db_ts['al']:
+                            if mbus_ts['al']:
                                 # format message
-                                msg = '"%s" ' % db_ts['label']
+                                msg = '"%s" ' % mbus_ts['label']
                                 if ts:
-                                    msg += '(%s) -> (%s)' % (db_ts['label_0'], db_ts['label_1'])
+                                    msg += '(%s) -> (%s)' % (mbus_ts['label_0'], mbus_ts['label_1'])
                                 else:
-                                    msg += '(%s) -> (%s)' % (db_ts['label_1'], db_ts['label_0'])
+                                    msg += '(%s) -> (%s)' % (mbus_ts['label_1'], mbus_ts['label_0'])
                                 # send it
                                 self.alarm(msg, id_host=id_host)
                         # update ts record
                         cursor.execute('UPDATE `mbus_ts` SET `ts`=%s, `error`=\'0\' '
-                                       'WHERE `id`=%s', (ts, db_ts['id']))
+                                       'WHERE `id`=%s', (ts, mbus_ts['id']))
                 except TypeError:
-                    cursor.execute('UPDATE `mbus_ts` SET `error`=\'1\' WHERE `id`=%s', db_ts['id'])
+                    cursor.execute('UPDATE `mbus_ts` SET `error`=\'1\' WHERE `id`=%s', mbus_ts['id'])
 
-    def set_tm(self, tag_name, tm, id_host=0):
+    def set_tm(self, tag_name: str, tm, id_host: int = 0):
         with self.db.cursor() as cursor:
             # tm exist ?
             if cursor.execute('SELECT * FROM `mbus_tm` WHERE `tag` = %s', tag_name):
@@ -147,7 +142,7 @@ class SupRstDB(object):
                     # update tm record
                     cursor.execute('UPDATE `mbus_tm` SET `error`=\'1\' WHERE `id`=%s', db_tm['id'])
 
-    def set_tg(self, tag_name, index):
+    def set_tg(self, tag_name: str, index: int):
         with self.db.cursor() as cursor:
             # ts exist ?
             if cursor.execute('SELECT * FROM `mbus_tg` WHERE `tag` = %s', tag_name):
@@ -173,21 +168,21 @@ class SupRstDB(object):
                 except TypeError:
                     cursor.execute('UPDATE `mbus_tg` SET `error`=\'1\' WHERE `id`=%s', db_tg['id'])
 
-    def ts(self, tag_name, default=None):
+    def ts(self, tag_name: str, default=None):
         with self.db.cursor() as cursor:
             if cursor.execute('SELECT `ts` FROM `mbus_ts` WHERE `tag` = %s', tag_name):
                 return cursor.fetchone()['ts']
             else:
                 return default
 
-    def tm(self, tag_name, default=None):
+    def tm(self, tag_name: str, default=None):
         with self.db.cursor() as cursor:
             if cursor.execute('SELECT `tm` FROM `mbus_tm` WHERE `tag` = %s', tag_name):
                 return cursor.fetchone()['tm']
             else:
                 return default
 
-    def strip_tags(self, tags_str):
+    def strip_tags(self, tags_str: str) -> str:
         # "<TM@Q_GRO>" -> "956.0"
         t = dict()
         for (token, token_type, tag) in re.findall(r'(<([A-Z]+?)@([a-zA-Z0-9_]+?)>)', tags_str):

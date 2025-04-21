@@ -1,0 +1,4 @@
+schedule==1.2.2
+pyModbusTCP>=0.3.0
+pymysql==1.1.1
+SQLAlchemy==2.0.40
