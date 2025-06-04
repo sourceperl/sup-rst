@@ -14,7 +14,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import declarative_base, relationship
 
-# Create a base class for declarative class definitions
+# base class for declarative class definitions
 Base = declarative_base()
 
 
@@ -30,15 +30,11 @@ class Alarm(Base):
     message = Column(String(80), nullable=False, default='')
 
     # define the index on the date_time column
-    __table_args__ = (Index('date_time', 'date_time'),)
+    __table_args__ = (Index('alarms.date_time', 'date_time'),)
 
     def __repr__(self):
         return (f"<Alarm(id={self.id}, id_host={self.id_host}, daemon='{self.daemon}', "
                 f"date_time={self.date_time}, ack='{self.ack}', message='{self.message}')>")
-
-
-# Create a base class for declarative class definitions
-Base = declarative_base()
 
 
 class Host(Base):
@@ -89,7 +85,7 @@ class IcmpHistory(Base):
     event_type = Column(CHAR(1), nullable=False, default='')
     event_date = Column(DateTime, nullable=False, default=datetime(1, 1, 1))
 
-    __table_args__ = (Index('host_id', 'id_host'),)
+    __table_args__ = (Index('icmp_history.id_host', 'id_host'),)
 
     def __repr__(self):
         return (f"<IcmpHistory(id={self.id}, id_host={self.id_host}, event_type='{self.event_type}', "
@@ -172,7 +168,7 @@ class MbusTg(Base):
     weight = Column(Integer, nullable=False, default=0)
     info = Column(Text, nullable=False)
 
-    __table_args__ = (Index('tag', 'tag', unique=True),)
+    __table_args__ = (Index('mbus_tg.tag', 'tag', unique=True),)
 
     def __repr__(self):
         return (f"<MbusTg(id={self.id}, id_table={self.id_table}, use={self.use}, "
@@ -191,7 +187,7 @@ class MbusTgLog(Base):
     tg = Column(Integer, nullable=False, default=0)
     update = Column(DateTime, nullable=False, default=datetime(1, 1, 1))
 
-    __table_args__ = (Index('id_tm', 'id_tg'),)
+    __table_args__ = (Index('mbus_tg_log.id_tg', 'id_tg'),)
 
     def __repr__(self):
         return (f"<MbusTgLog(id={self.id}, id_tg={self.id_tg}, type='{self.type}', "
@@ -224,7 +220,7 @@ class MbusTm(Base):
     tm_max = Column(Float, nullable=False, default=1000.0)
     tm_hist = Column(Float, nullable=False, default=1.0)
 
-    __table_args__ = (Index('tag', 'tag', unique=True),)
+    __table_args__ = (Index('mbus_tm.tag', 'tag', unique=True),)
 
     def __repr__(self):
         return (f"<MbusTm(id={self.id}, id_table={self.id_table}, use={self.use}, "
@@ -244,7 +240,9 @@ class MbusTmLog(Base):
     tm = Column(Float, nullable=False, default=0.0)
     update = Column(DateTime, nullable=False, default=datetime(1, 1, 1))
 
-    __table_args__ = (Index('id_tm', 'id_tm'), Index('update', 'update'), Index('graph', 'id_tm', 'update'))
+    __table_args__ = (Index('mbus_tm_log.id_tm', 'id_tm'), 
+                      Index('mbus_tm_log.update', 'update'), 
+                      Index('mbus_tm_log.graph', 'id_tm', 'update'))
 
     def __repr__(self):
         return (f"<MbusTmLog(id={self.id}, id_tm={self.id_tm}, tm={self.tm}, "
@@ -269,7 +267,7 @@ class MbusTs(Base):
     info = Column(Text, nullable=False)
     al = Column(SmallInteger, nullable=False, default=1)
 
-    __table_args__ = (Index('tag', 'tag', unique=True),)
+    __table_args__ = (Index('mbus_ts.tag', 'tag', unique=True),)
 
     def __repr__(self):
         return (f"<MbusTs(id={self.id}, id_table={self.id_table}, use={self.use}, "
@@ -287,7 +285,7 @@ class MbusTsLog(Base):
     ts = Column(SmallInteger, nullable=False, default=0)
     update = Column(DateTime, nullable=False, default=datetime(1, 1, 1))
 
-    __table_args__ = (Index('id_ts', 'id_ts'), Index('update', 'update'))
+    __table_args__ = (Index('mbus_ts_log.id_ts', 'id_ts'), Index('mbus_ts_log.update', 'update'))
 
     def __repr__(self):
         return (f"<MbusTsLog(id={self.id}, id_ts={self.id_ts}, ts={self.ts}, "
