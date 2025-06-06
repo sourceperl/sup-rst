@@ -80,9 +80,7 @@ def thread_ping():
 
 # init and start the thread pool
 for i in range(NUM_THREADS):
-    worker = Thread(target=thread_ping, args=())
-    worker.setDaemon(True)
-    worker.start()
+    Thread(target=thread_ping, args=(), daemon=True).start()
 
 # main loop
 while True:

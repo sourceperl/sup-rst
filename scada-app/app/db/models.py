@@ -12,7 +12,7 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.orm import declarative_base
 
 # base class for declarative class definitions
 Base = declarative_base()
@@ -53,7 +53,7 @@ class Host(Base):
 class Icmp(Base):
     __tablename__ = 'icmp'
 
-    id_host = Column(Integer, primary_key=True, nullable=False, default=0)
+    id_host = Column(Integer, ForeignKey('hosts.id'), primary_key=True, nullable=False, default=0)
     icmp_inhibition = Column(SmallInteger, nullable=False, default=0)
     icmp_timeout = Column(SmallInteger, nullable=False, default=4)
     icmp_good_threshold = Column(Integer, nullable=False, default=2)
@@ -285,7 +285,8 @@ class MbusTsLog(Base):
     ts = Column(SmallInteger, nullable=False, default=0)
     update = Column(DateTime, nullable=False, default=datetime(1, 1, 1))
 
-    __table_args__ = (Index('mbus_ts_log.id_ts', 'id_ts'), Index('mbus_ts_log.update', 'update'))
+    __table_args__ = (Index('mbus_ts_log.id_ts', 'id_ts'), 
+                      Index('mbus_ts_log.update', 'update'))
 
     def __repr__(self):
         return (f"<MbusTsLog(id={self.id}, id_ts={self.id_ts}, ts={self.ts}, "

@@ -23,8 +23,8 @@ Apply changes :
 # add an admin whitelist (see snippets/admin-whitelist.conf.model)
 sudo vim /etc/nginx/snippets/admin-whitelist.conf
 # copy files
-sudo cp nginx/conf.d/security.conf /etc/nginx/
-sudo cp nginx/sites-available/site.conf /etc/nginx/sites-available/
+sudo cp -v nginx/conf.d/security.conf /etc/nginx/conf.d/
+sudo cp -v nginx/sites-available/site.conf /etc/nginx/sites-available/
 # disable default conf
 sudo rm /etc/nginx/sites-enabled/default
 # enable site conf
