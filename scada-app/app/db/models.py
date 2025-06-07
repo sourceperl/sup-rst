@@ -12,7 +12,7 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import declarative_base, relationship
 
 # base class for declarative class definitions
 Base = declarative_base()
@@ -44,6 +44,7 @@ class Host(Base):
     id_subnet = Column(Integer, nullable=False, default=0)
     name = Column(String(30), nullable=False, default='')
     hostname = Column(String(30), nullable=False, default='')
+    icmp = relationship('Icmp', back_populates='host', cascade='all, delete-orphan')
 
     def __repr__(self):
         return (f"<Host(id={self.id}, id_subnet={self.id_subnet}, name='{self.name}', "
@@ -66,6 +67,7 @@ class Icmp(Base):
     icmp_rtt = Column(Integer, nullable=False, default=0)
     icmp_up_index = Column(Integer, nullable=False, default=0)
     icmp_down_index = Column(Integer, nullable=False, default=0)
+    host = relationship('Host', back_populates='icmp')
 
     def __repr__(self):
         return (f"<Icmp(id_host={self.id_host}, icmp_inhibition={self.icmp_inhibition}, "
@@ -240,8 +242,8 @@ class MbusTmLog(Base):
     tm = Column(Float, nullable=False, default=0.0)
     update = Column(DateTime, nullable=False, default=datetime(1, 1, 1))
 
-    __table_args__ = (Index('mbus_tm_log.id_tm', 'id_tm'), 
-                      Index('mbus_tm_log.update', 'update'), 
+    __table_args__ = (Index('mbus_tm_log.id_tm', 'id_tm'),
+                      Index('mbus_tm_log.update', 'update'),
                       Index('mbus_tm_log.graph', 'id_tm', 'update'))
 
     def __repr__(self):
@@ -285,7 +287,7 @@ class MbusTsLog(Base):
     ts = Column(SmallInteger, nullable=False, default=0)
     update = Column(DateTime, nullable=False, default=datetime(1, 1, 1))
 
-    __table_args__ = (Index('mbus_ts_log.id_ts', 'id_ts'), 
+    __table_args__ = (Index('mbus_ts_log.id_ts', 'id_ts'),
                       Index('mbus_ts_log.update', 'update'))
 
     def __repr__(self):

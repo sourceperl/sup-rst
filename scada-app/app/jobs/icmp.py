@@ -49,6 +49,13 @@ class JobICMP:
     def run(self):
         #
         session = sessionmaker(self.engine)()
+
+        # insert data for test purpose
+        new_host = Host(id_subnet=0, name='localhost', hostname='127.0.0.1')
+        new_icmp = Icmp(host=new_host)
+        session.add_all((new_host, new_icmp))
+        session.commit()
+
         # TODO keep python hints here for Icmp and Host
         query = session.query(Icmp, Host).join(Host, Host.id == Icmp.id_host).filter(Icmp.icmp_inhibition == '0').all()
         for icmp, host in query:
