@@ -21,11 +21,8 @@ Base = declarative_base()
 class Alarm(Base):
     __tablename__ = 'alarms'
 
-    # Primary key with autoincrement
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
-
-    # All other columns converted
-    id_host: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    id_host: Mapped[int] = mapped_column(ForeignKey('hosts.id'), nullable=False, default=0)
     daemon: Mapped[str] = mapped_column(String(6), nullable=False, default='')
     date_time: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime(1, 1, 1))
     ack: Mapped[str] = mapped_column(CHAR(1), nullable=False, default='N')
@@ -87,7 +84,7 @@ class IcmpHistory(Base):
     __tablename__ = 'icmp_history'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    id_host: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    id_host: Mapped[int] = mapped_column(ForeignKey('hosts.id'), nullable=False, default=0)
     event_type: Mapped[str] = mapped_column(CHAR(1), nullable=False, default='')
     event_date: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime(1, 1, 1))
 
@@ -103,7 +100,7 @@ class IcmpIndex(Base):
     __tablename__ = 'icmp_index'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    id_host: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    id_host: Mapped[int] = mapped_column(ForeignKey('hosts.id'), nullable=False, default=0)
     date_time: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime(1, 1, 1))
     up_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     down_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -116,11 +113,8 @@ class IcmpIndex(Base):
 class IcmpRttLog(Base):
     __tablename__ = 'icmp_rtt_log'
 
-    # Primary key with autoincrement
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
-
-    # All other columns converted
-    id_host: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    id_host: Mapped[int] = mapped_column(ForeignKey('hosts.id'), nullable=False, default=0)
     rtt: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     rtt_datetime: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime(1, 1, 1))
 
@@ -132,7 +126,7 @@ class IcmpRttLog(Base):
 class Mbus(Base):
     __tablename__ = 'mbus'
 
-    id_host: Mapped[int] = mapped_column(Integer, primary_key=True, nullable=False, default=0)
+    id_host: Mapped[int] = mapped_column(ForeignKey('hosts.id'), primary_key=True, nullable=False, default=0)
     mbus_inhibition: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
     mbus_timeout: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=4)
     mbus_port: Mapped[int] = mapped_column(Integer, nullable=False, default=502)
@@ -146,7 +140,7 @@ class MbusTables(Base):
     __tablename__ = 'mbus_tables'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    id_host: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    id_host: Mapped[int] = mapped_column(ForeignKey('hosts.id'), nullable=False, default=0)
     unit_id: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
     type: Mapped[str] = mapped_column(String(16), nullable=False, default='words')
     address: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=23000)
@@ -164,7 +158,7 @@ class MbusTg(Base):
     __tablename__ = 'mbus_tg'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    id_table: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    id_table: Mapped[int] = mapped_column(ForeignKey('mbus_tables.id'), nullable=False, default=0)
     use: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
     error: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
     index: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
@@ -191,7 +185,7 @@ class MbusTgLog(Base):
     __tablename__ = 'mbus_tg_log'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    id_tg: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    id_tg: Mapped[int] = mapped_column(ForeignKey('mbus_tg.id'), nullable=False, default=0)
     type: Mapped[str] = mapped_column(CHAR(1), nullable=False, default='H')
     tg: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     update: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime(1, 1, 1))
@@ -207,7 +201,7 @@ class MbusTm(Base):
     __tablename__ = 'mbus_tm'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    id_table: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    id_table: Mapped[int] = mapped_column(ForeignKey('mbus_tables.id'), nullable=False, default=0)
     use: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
     error: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
     index: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
@@ -245,7 +239,7 @@ class MbusTmLog(Base):
     __tablename__ = 'mbus_tm_log'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    id_tm: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    id_tm: Mapped[int] = mapped_column(ForeignKey('mbus_tm.id'), nullable=False, default=0)
     tm: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     update: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime(1, 1, 1))
 
@@ -262,7 +256,7 @@ class MbusTs(Base):
     __tablename__ = 'mbus_ts'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    id_table: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    id_table: Mapped[int] = mapped_column(ForeignKey('mbus_tables.id'), nullable=False, default=0)
     use: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
     error: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
     index: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
@@ -290,7 +284,7 @@ class MbusTsLog(Base):
     __tablename__ = 'mbus_ts_log'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    id_ts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    id_ts: Mapped[int] = mapped_column(ForeignKey('mbus_ts.id'), nullable=False, default=0)
     ts: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
     update: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime(1, 1, 1))
 
@@ -305,7 +299,7 @@ class MbusTsLog(Base):
 class MbusVGrad(Base):
     __tablename__ = 'mbus_v_grad'
 
-    id_tm: Mapped[int] = mapped_column(Integer, primary_key=True, nullable=False, default=0)
+    id_tm: Mapped[int] = mapped_column(ForeignKey('mbus_tm.id'), primary_key=True, nullable=False, default=0)
     use: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
     last_tm: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     max_grad: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
@@ -320,7 +314,7 @@ class MbusVTg(Base):
     __tablename__ = 'mbus_v_tg'
 
     id_tg: Mapped[int] = mapped_column(Integer, primary_key=True, nullable=False, default=0)
-    id_host: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    id_host: Mapped[int] = mapped_column(ForeignKey('hosts.id'), nullable=False, default=0)
     script: Mapped[str] = mapped_column(Text, nullable=False)
     i_time: Mapped[int] = mapped_column(Integer, nullable=False, default=3600)
     c_time: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -334,8 +328,8 @@ class MbusVTg(Base):
 class MbusVTm(Base):
     __tablename__ = 'mbus_v_tm'
 
-    id_tm: Mapped[int] = mapped_column(Integer, primary_key=True, nullable=False, default=0)
-    id_host: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    id_tm: Mapped[int] = mapped_column(ForeignKey('mbus_tm.id'), primary_key=True, nullable=False, default=0)
+    id_host: Mapped[int] = mapped_column(ForeignKey('hosts.id'), nullable=False, default=0)
     script: Mapped[str] = mapped_column(Text, nullable=False)
     comment: Mapped[str] = mapped_column(Text, nullable=False)
 
@@ -347,8 +341,8 @@ class MbusVTm(Base):
 class MbusVTs(Base):
     __tablename__ = 'mbus_v_ts'
 
-    id_ts: Mapped[int] = mapped_column(Integer, primary_key=True, nullable=False, default=0)
-    id_host: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    id_ts: Mapped[int] = mapped_column(ForeignKey('mbus_ts.id'), primary_key=True, nullable=False, default=0)
+    id_host: Mapped[int] = mapped_column(ForeignKey('hosts.id'), nullable=False, default=0)
     script: Mapped[str] = mapped_column(Text, nullable=False)
     comment: Mapped[str] = mapped_column(Text, nullable=False)
 
