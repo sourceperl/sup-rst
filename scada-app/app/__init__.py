@@ -1,8 +1,12 @@
+import logging
+
 from sqlalchemy import URL, Engine, create_engine
 from sqlalchemy.orm import sessionmaker
 
 from .db.models import Base
 from .jobs.icmp import JobICMP
+
+logger = logging.getLogger(__name__)
 
 
 def init_db(use_sqlite: bool = False) -> Engine:
@@ -22,7 +26,7 @@ def init_db(use_sqlite: bool = False) -> Engine:
 
 
 def run() -> None:
-    engine = init_db(use_sqlite=True)
+    engine = init_db(use_sqlite=False)
     # run icmp job
     job_icmp = JobICMP(engine)
     job_icmp.run()

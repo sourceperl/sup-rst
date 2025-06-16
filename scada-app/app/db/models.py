@@ -2,7 +2,6 @@ from datetime import datetime
 
 from sqlalchemy import (
     CHAR,
-    Column,
     DateTime,
     Float,
     ForeignKey,
@@ -12,7 +11,7 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.orm import Mapped, declarative_base, mapped_column, relationship
 
 # base class for declarative class definitions
 Base = declarative_base()
@@ -22,14 +21,17 @@ Base = declarative_base()
 class Alarm(Base):
     __tablename__ = 'alarms'
 
-    id = Column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    id_host = Column(Integer, nullable=False, default=0)
-    daemon = Column(String(6), nullable=False, default='')
-    date_time = Column(DateTime, nullable=False, default=datetime(1, 1, 1))
-    ack = Column(CHAR(1), nullable=False, default='N')
-    message = Column(String(80), nullable=False, default='')
+    # Primary key with autoincrement
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
 
-    # define the index on the date_time column
+    # All other columns converted
+    id_host: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    daemon: Mapped[str] = mapped_column(String(6), nullable=False, default='')
+    date_time: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime(1, 1, 1))
+    ack: Mapped[str] = mapped_column(CHAR(1), nullable=False, default='N')
+    message: Mapped[str] = mapped_column(String(80), nullable=False, default='')
+
+    # The index definition remains the same
     __table_args__ = (Index('alarms.date_time', 'date_time'),)
 
     def __repr__(self):
@@ -40,11 +42,12 @@ class Alarm(Base):
 class Host(Base):
     __tablename__ = 'hosts'
 
-    id = Column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    id_subnet = Column(Integer, nullable=False, default=0)
-    name = Column(String(30), nullable=False, default='')
-    hostname = Column(String(30), nullable=False, default='')
-    icmp = relationship('Icmp', back_populates='host', cascade='all, delete-orphan')
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
+    id_subnet: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    name: Mapped[str] = mapped_column(String(30), nullable=False, default='')
+    hostname: Mapped[str] = mapped_column(String(30), nullable=False, default='')
+
+    icmp: Mapped['Icmp'] = relationship('Icmp', back_populates='host', cascade='all, delete-orphan')
 
     def __repr__(self):
         return (f"<Host(id={self.id}, id_subnet={self.id_subnet}, name='{self.name}', "
@@ -54,20 +57,21 @@ class Host(Base):
 class Icmp(Base):
     __tablename__ = 'icmp'
 
-    id_host = Column(Integer, ForeignKey('hosts.id'), primary_key=True, nullable=False, default=0)
-    icmp_inhibition = Column(SmallInteger, nullable=False, default=0)
-    icmp_timeout = Column(SmallInteger, nullable=False, default=4)
-    icmp_good_threshold = Column(Integer, nullable=False, default=2)
-    icmp_good_count = Column(Integer, nullable=False, default=0)
-    icmp_fail_threshold = Column(Integer, nullable=False, default=4)
-    icmp_fail_count = Column(Integer, nullable=False, default=0)
-    icmp_log_rtt = Column(CHAR(1), nullable=False, default='N')
-    icmp_state = Column(CHAR(1), nullable=False, default='D')
-    icmp_chg_state = Column(DateTime, nullable=False, default=datetime(1, 1, 1))
-    icmp_rtt = Column(Integer, nullable=False, default=0)
-    icmp_up_index = Column(Integer, nullable=False, default=0)
-    icmp_down_index = Column(Integer, nullable=False, default=0)
-    host = relationship('Host', back_populates='icmp')
+    id_host: Mapped[int] = mapped_column(ForeignKey('hosts.id'), primary_key=True, nullable=False, default=0)
+    icmp_inhibition: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    icmp_timeout: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=4)
+    icmp_good_threshold: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    icmp_good_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    icmp_fail_threshold: Mapped[int] = mapped_column(Integer, nullable=False, default=4)
+    icmp_fail_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    icmp_log_rtt: Mapped[str] = mapped_column(CHAR(1), nullable=False, default='N')
+    icmp_state: Mapped[str] = mapped_column(CHAR(1), nullable=False, default='D')
+    icmp_chg_state: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime(1, 1, 1))
+    icmp_rtt: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    icmp_up_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    icmp_down_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    host: Mapped['Host'] = relationship('Host', back_populates='icmp')
 
     def __repr__(self):
         return (f"<Icmp(id_host={self.id_host}, icmp_inhibition={self.icmp_inhibition}, "
@@ -82,11 +86,12 @@ class Icmp(Base):
 class IcmpHistory(Base):
     __tablename__ = 'icmp_history'
 
-    id = Column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    id_host = Column(Integer, nullable=False, default=0)
-    event_type = Column(CHAR(1), nullable=False, default='')
-    event_date = Column(DateTime, nullable=False, default=datetime(1, 1, 1))
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
+    id_host: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    event_type: Mapped[str] = mapped_column(CHAR(1), nullable=False, default='')
+    event_date: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime(1, 1, 1))
 
+    # The index definition remains the same
     __table_args__ = (Index('icmp_history.id_host', 'id_host'),)
 
     def __repr__(self):
@@ -97,11 +102,11 @@ class IcmpHistory(Base):
 class IcmpIndex(Base):
     __tablename__ = 'icmp_index'
 
-    id = Column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    id_host = Column(Integer, nullable=False, default=0)
-    date_time = Column(DateTime, nullable=False, default=datetime(1, 1, 1))
-    up_index = Column(Integer, nullable=False, default=0)
-    down_index = Column(Integer, nullable=False, default=0)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
+    id_host: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    date_time: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime(1, 1, 1))
+    up_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    down_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     def __repr__(self):
         return (f"<IcmpIndex(id={self.id}, id_host={self.id_host}, date_time={self.date_time}, "
@@ -111,10 +116,13 @@ class IcmpIndex(Base):
 class IcmpRttLog(Base):
     __tablename__ = 'icmp_rtt_log'
 
-    id = Column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    id_host = Column(Integer, nullable=False, default=0)
-    rtt = Column(Integer, nullable=False, default=0)
-    rtt_datetime = Column(DateTime, nullable=False, default=datetime(1, 1, 1))
+    # Primary key with autoincrement
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
+
+    # All other columns converted
+    id_host: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    rtt: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    rtt_datetime: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime(1, 1, 1))
 
     def __repr__(self):
         return (f"<IcmpRttLog(id={self.id}, id_host={self.id_host}, rtt={self.rtt}, "
@@ -124,10 +132,10 @@ class IcmpRttLog(Base):
 class Mbus(Base):
     __tablename__ = 'mbus'
 
-    id_host = Column(Integer, primary_key=True, nullable=False, default=0)
-    mbus_inhibition = Column(SmallInteger, nullable=False, default=0)
-    mbus_timeout = Column(SmallInteger, nullable=False, default=4)
-    mbus_port = Column(Integer, nullable=False, default=502)
+    id_host: Mapped[int] = mapped_column(Integer, primary_key=True, nullable=False, default=0)
+    mbus_inhibition: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    mbus_timeout: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=4)
+    mbus_port: Mapped[int] = mapped_column(Integer, nullable=False, default=502)
 
     def __repr__(self):
         return (f"<Mbus(id_host={self.id_host}, mbus_inhibition={self.mbus_inhibition}, "
@@ -137,38 +145,37 @@ class Mbus(Base):
 class MbusTables(Base):
     __tablename__ = 'mbus_tables'
 
-    id = Column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    id_host = Column(Integer, nullable=False, default=0)
-    unit_id = Column(SmallInteger, nullable=False, default=1)
-    type = Column(String(16), nullable=False, default='words')
-    address = Column(SmallInteger, nullable=False, default=23000)
-    size = Column(SmallInteger, nullable=False, default=1)
-    status = Column(CHAR(1), nullable=False, default='E')
-    update = Column(DateTime, nullable=False, default=datetime(1, 1, 1))
-    comment = Column(Text, nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
+    id_host: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    unit_id: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
+    type: Mapped[str] = mapped_column(String(16), nullable=False, default='words')
+    address: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=23000)
+    size: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
+    status: Mapped[str] = mapped_column(CHAR(1), nullable=False, default='E')
+    update: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime(1, 1, 1))
+    comment: Mapped[str] = mapped_column(Text, nullable=False)
 
     def __repr__(self):
         return (f"<MbusTables(id={self.id}, id_host={self.id_host}, unit_id={self.unit_id}, "
                 f"type='{self.type}', address={self.address}, size={self.size}, "
                 f"status='{self.status}', update={self.update}, comment='{self.comment}')>")
 
-
 class MbusTg(Base):
     __tablename__ = 'mbus_tg'
 
-    id = Column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    id_table = Column(Integer, nullable=False, default=0)
-    use = Column(SmallInteger, nullable=False, default=1)
-    error = Column(SmallInteger, nullable=False, default=1)
-    index = Column(SmallInteger, nullable=False, default=0)
-    tag = Column(String(15), nullable=False, default='')
-    label = Column(String(25), nullable=False, default='')
-    tg = Column(Integer, nullable=False, default=0)
-    last_tg = Column(SmallInteger, nullable=False, default=0)
-    last_tg_h = Column(Integer, nullable=False, default=0)
-    unit = Column(String(8), nullable=False, default='')
-    weight = Column(Integer, nullable=False, default=0)
-    info = Column(Text, nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
+    id_table: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    use: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
+    error: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
+    index: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    tag: Mapped[str] = mapped_column(String(15), nullable=False, default='')
+    label: Mapped[str] = mapped_column(String(25), nullable=False, default='')
+    tg: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_tg: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    last_tg_h: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    unit: Mapped[str] = mapped_column(String(8), nullable=False, default='')
+    weight: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    info: Mapped[str] = mapped_column(Text, nullable=False)
 
     __table_args__ = (Index('mbus_tg.tag', 'tag', unique=True),)
 
@@ -183,11 +190,11 @@ class MbusTg(Base):
 class MbusTgLog(Base):
     __tablename__ = 'mbus_tg_log'
 
-    id = Column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    id_tg = Column(Integer, nullable=False, default=0)
-    type = Column(CHAR(1), nullable=False, default='H')
-    tg = Column(Integer, nullable=False, default=0)
-    update = Column(DateTime, nullable=False, default=datetime(1, 1, 1))
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
+    id_tg: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    type: Mapped[str] = mapped_column(CHAR(1), nullable=False, default='H')
+    tg: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    update: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime(1, 1, 1))
 
     __table_args__ = (Index('mbus_tg_log.id_tg', 'id_tg'),)
 
@@ -199,28 +206,28 @@ class MbusTgLog(Base):
 class MbusTm(Base):
     __tablename__ = 'mbus_tm'
 
-    id = Column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    id_table = Column(Integer, nullable=False, default=0)
-    use = Column(SmallInteger, nullable=False, default=1)
-    error = Column(SmallInteger, nullable=False, default=1)
-    index = Column(SmallInteger, nullable=False, default=0)
-    tag = Column(String(15), nullable=False, default='')
-    label = Column(String(25), nullable=False, default='')
-    tm = Column(Float, nullable=False, default=0.0)
-    unit = Column(String(8), nullable=False, default='')
-    info = Column(String(30), nullable=False, default='')
-    can_min = Column(Float, nullable=False, default=0.0)
-    can_max = Column(Float, nullable=False, default=1000.0)
-    gaz_min = Column(Float, nullable=False, default=0.0)
-    gaz_max = Column(Float, nullable=False, default=1000.0)
-    signed = Column(SmallInteger, nullable=False, default=1)
-    log = Column(SmallInteger, nullable=False, default=1)
-    al = Column(SmallInteger, nullable=False, default=0)
-    al_min = Column(SmallInteger, nullable=False, default=0)
-    tm_min = Column(Float, nullable=False, default=0.0)
-    al_max = Column(SmallInteger, nullable=False, default=0)
-    tm_max = Column(Float, nullable=False, default=1000.0)
-    tm_hist = Column(Float, nullable=False, default=1.0)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
+    id_table: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    use: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
+    error: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
+    index: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    tag: Mapped[str] = mapped_column(String(15), nullable=False, default='')
+    label: Mapped[str] = mapped_column(String(25), nullable=False, default='')
+    tm: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    unit: Mapped[str] = mapped_column(String(8), nullable=False, default='')
+    info: Mapped[str] = mapped_column(String(30), nullable=False, default='')
+    can_min: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    can_max: Mapped[float] = mapped_column(Float, nullable=False, default=1000.0)
+    gaz_min: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    gaz_max: Mapped[float] = mapped_column(Float, nullable=False, default=1000.0)
+    signed: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
+    log: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
+    al: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    al_min: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    tm_min: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    al_max: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    tm_max: Mapped[float] = mapped_column(Float, nullable=False, default=1000.0)
+    tm_hist: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
 
     __table_args__ = (Index('mbus_tm.tag', 'tag', unique=True),)
 
@@ -237,10 +244,10 @@ class MbusTm(Base):
 class MbusTmLog(Base):
     __tablename__ = 'mbus_tm_log'
 
-    id = Column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    id_tm = Column(Integer, nullable=False, default=0)
-    tm = Column(Float, nullable=False, default=0.0)
-    update = Column(DateTime, nullable=False, default=datetime(1, 1, 1))
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
+    id_tm: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tm: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    update: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime(1, 1, 1))
 
     __table_args__ = (Index('mbus_tm_log.id_tm', 'id_tm'),
                       Index('mbus_tm_log.update', 'update'),
@@ -254,20 +261,20 @@ class MbusTmLog(Base):
 class MbusTs(Base):
     __tablename__ = 'mbus_ts'
 
-    id = Column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    id_table = Column(Integer, nullable=False, default=0)
-    use = Column(SmallInteger, nullable=False, default=1)
-    error = Column(SmallInteger, nullable=False, default=1)
-    index = Column(SmallInteger, nullable=False, default=0)
-    bit = Column(SmallInteger, nullable=False, default=0)
-    tag = Column(String(15), nullable=False, default='')
-    label = Column(String(25), nullable=False, default='')
-    ts = Column(SmallInteger, nullable=False, default=0)
-    label_0 = Column(String(15), nullable=False, default='')
-    label_1 = Column(String(15), nullable=False, default='')
-    _not = Column(SmallInteger, nullable=False, default=0)
-    info = Column(Text, nullable=False)
-    al = Column(SmallInteger, nullable=False, default=1)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
+    id_table: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    use: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
+    error: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
+    index: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    bit: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    tag: Mapped[str] = mapped_column(String(15), nullable=False, default='')
+    label: Mapped[str] = mapped_column(String(25), nullable=False, default='')
+    ts: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    label_0: Mapped[str] = mapped_column(String(15), nullable=False, default='')
+    label_1: Mapped[str] = mapped_column(String(15), nullable=False, default='')
+    _not: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    info: Mapped[str] = mapped_column(Text, nullable=False)
+    al: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
 
     __table_args__ = (Index('mbus_ts.tag', 'tag', unique=True),)
 
@@ -282,10 +289,10 @@ class MbusTs(Base):
 class MbusTsLog(Base):
     __tablename__ = 'mbus_ts_log'
 
-    id = Column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    id_ts = Column(Integer, nullable=False, default=0)
-    ts = Column(SmallInteger, nullable=False, default=0)
-    update = Column(DateTime, nullable=False, default=datetime(1, 1, 1))
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
+    id_ts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    ts: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    update: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime(1, 1, 1))
 
     __table_args__ = (Index('mbus_ts_log.id_ts', 'id_ts'),
                       Index('mbus_ts_log.update', 'update'))
@@ -298,11 +305,11 @@ class MbusTsLog(Base):
 class MbusVGrad(Base):
     __tablename__ = 'mbus_v_grad'
 
-    id_tm = Column(Integer, primary_key=True, nullable=False, default=0)
-    use = Column(SmallInteger, nullable=False, default=1)
-    last_tm = Column(Float, nullable=False, default=0.0)
-    max_grad = Column(Float, nullable=False, default=0.0)
-    comment = Column(Text, nullable=False)
+    id_tm: Mapped[int] = mapped_column(Integer, primary_key=True, nullable=False, default=0)
+    use: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
+    last_tm: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    max_grad: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    comment: Mapped[str] = mapped_column(Text, nullable=False)
 
     def __repr__(self):
         return (f"<MbusVGrad(id_tm={self.id_tm}, use={self.use}, last_tm={self.last_tm}, "
@@ -312,12 +319,12 @@ class MbusVGrad(Base):
 class MbusVTg(Base):
     __tablename__ = 'mbus_v_tg'
 
-    id_tg = Column(Integer, primary_key=True, nullable=False, default=0)
-    id_host = Column(Integer, nullable=False, default=0)
-    script = Column(Text, nullable=False)
-    i_time = Column(Integer, nullable=False, default=3600)
-    c_time = Column(Integer, nullable=False, default=0)
-    comment = Column(Text, nullable=False)
+    id_tg: Mapped[int] = mapped_column(Integer, primary_key=True, nullable=False, default=0)
+    id_host: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    script: Mapped[str] = mapped_column(Text, nullable=False)
+    i_time: Mapped[int] = mapped_column(Integer, nullable=False, default=3600)
+    c_time: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    comment: Mapped[str] = mapped_column(Text, nullable=False)
 
     def __repr__(self):
         return (f"<MbusVTg(id_tg={self.id_tg}, id_host={self.id_host}, script='{self.script}', "
@@ -327,10 +334,10 @@ class MbusVTg(Base):
 class MbusVTm(Base):
     __tablename__ = 'mbus_v_tm'
 
-    id_tm = Column(Integer, primary_key=True, nullable=False, default=0)
-    id_host = Column(Integer, nullable=False, default=0)
-    script = Column(Text, nullable=False)
-    comment = Column(Text, nullable=False)
+    id_tm: Mapped[int] = mapped_column(Integer, primary_key=True, nullable=False, default=0)
+    id_host: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    script: Mapped[str] = mapped_column(Text, nullable=False)
+    comment: Mapped[str] = mapped_column(Text, nullable=False)
 
     def __repr__(self):
         return (f"<MbusVTm(id_tm={self.id_tm}, id_host={self.id_host}, script='{self.script}', "
@@ -340,10 +347,10 @@ class MbusVTm(Base):
 class MbusVTs(Base):
     __tablename__ = 'mbus_v_ts'
 
-    id_ts = Column(Integer, primary_key=True, nullable=False, default=0)
-    id_host = Column(Integer, nullable=False, default=0)
-    script = Column(Text, nullable=False)
-    comment = Column(Text, nullable=False)
+    id_ts: Mapped[int] = mapped_column(Integer, primary_key=True, nullable=False, default=0)
+    id_host: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    script: Mapped[str] = mapped_column(Text, nullable=False)
+    comment: Mapped[str] = mapped_column(Text, nullable=False)
 
     def __repr__(self):
         return (f"<MbusVTs(id_ts={self.id_ts}, id_host={self.id_host}, script='{self.script}', "
@@ -353,11 +360,11 @@ class MbusVTs(Base):
 class Subnet(Base):
     __tablename__ = 'subnets'
 
-    id = Column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    name = Column(String(30), nullable=False, default='')
-    gateway_tag = Column(String(15), nullable=False, default='')
-    gateway_code = Column(String(30), nullable=False, default='')
-    link_type = Column(String(20), nullable=False, default='')
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(30), nullable=False, default='')
+    gateway_tag: Mapped[str] = mapped_column(String(15), nullable=False, default='')
+    gateway_code: Mapped[str] = mapped_column(String(30), nullable=False, default='')
+    link_type: Mapped[str] = mapped_column(String(20), nullable=False, default='')
 
     def __repr__(self):
         return (f"<Subnet(id={self.id}, name='{self.name}', gateway_tag='{self.gateway_tag}', "
@@ -367,8 +374,8 @@ class Subnet(Base):
 class Variable(Base):
     __tablename__ = 'variables'
 
-    name = Column(String(30), primary_key=True, nullable=False)
-    value = Column(String(255), nullable=False)
+    name: Mapped[str] = mapped_column(String(30), primary_key=True, nullable=False)
+    value: Mapped[str] = mapped_column(String(255), nullable=False)
 
     def __repr__(self):
         return f"<Variable(name='{self.name}', value='{self.value}')>"

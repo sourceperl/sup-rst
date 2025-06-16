@@ -7,30 +7,36 @@ Use standard linux /bin/ping utility.
 
 # TODO FIX avoid except in thread : can cause infinite wait ?
 
+import logging
 import os
-import queue as queue
 import re
 import subprocess
 import time
 from dataclasses import dataclass
 from datetime import datetime
+from queue import Empty, Queue
 from threading import Thread
 from typing import List, Optional, Tuple
 
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from ..db.models import Host, Icmp
+from ..db.models import Host, Icmp, Variable
+
+logger = logging.getLogger(__name__)
+
 
 # some consts
 PROCESS_NAME = 'icmp'
 
 
 @dataclass
-class NodeStatus:
+class HostStatus:
+    id: int
     hostname: str
     timeout: int
     state: Optional[str] = None
+    rtt: Optional[int] = None
     update: Optional[datetime] = None
 
 
@@ -40,30 +46,67 @@ class JobICMP:
         self.engine = engine
         self.icmp_refresh = icmp_refresh
         # private
-        self._queue_in = queue.Queue()
-        self._queue_out = queue.Queue()
+        self._queue_in: Queue[HostStatus] = Queue()
+        self._queue_out: Queue[HostStatus] = Queue()
         # init and start the thread pool
         for _ in range(n_threads):
             Thread(target=self._worker_code, args=(), daemon=True).start()
 
     def run(self):
-        #
+        # init a session
         session = sessionmaker(self.engine)()
 
         # insert data for test purpose
-        new_host = Host(id_subnet=0, name='localhost', hostname='127.0.0.1')
-        new_icmp = Icmp(host=new_host)
-        session.add_all((new_host, new_icmp))
+        if not session.query(Host).filter_by(name='localhost').first():
+            session.add(Icmp(host=Host(id_subnet=0, name='localhost', hostname='127.0.0.1')))
+        if not session.query(Host).filter_by(name='free').first():
+            session.add(Icmp(host=Host(id_subnet=0, name='free', hostname='www.free.fr')))
         session.commit()
 
-        # TODO keep python hints here for Icmp and Host
-        query = session.query(Icmp, Host).join(Host, Host.id == Icmp.id_host).filter(Icmp.icmp_inhibition == '0').all()
-        for icmp, host in query:
-            print(f'{icmp=} {host=}')
+        # cycle loop
+        while True:
+            # save cycle start time
+            cycle_start = time.monotonic()
+            # populate input queue for workers
+            for icmp in session.query(Icmp).filter(Icmp.icmp_inhibition == '0').all():
+                # populate in queue
+                host_status = HostStatus(id=icmp.id_host, hostname=icmp.host.hostname,
+                                         timeout=icmp.icmp_timeout)
+                self._queue_in.put(host_status)
+                logger.warning(host_status)
+            # wait until in queue empty (current cycle ending)
+            self._queue_in.join()
 
-        # TODO work on progress end
+            cycle_time = time.monotonic() - cycle_start
+
+            # process results
+            while True:
+                try:
+                    host_status = self._queue_out.get_nowait()
+                    icmp = session.query(Icmp).filter_by(id_host=host_status.id).first()
+                    if icmp and host_status.state:
+                        # current state
+                        icmp.icmp_state = host_status.state
+                        # host is up
+                        if icmp.icmp_state == 'U':
+                            icmp.icmp_fail_count = 0
+                            icmp.icmp_up_index += 1
+                            icmp.icmp_rtt = host_status.rtt or 0
+                        session.merge(icmp)
+                        logger.warning(f'merge {icmp}')
+                    session.commit()
+                except Empty:
+                    break
+
+            # update variables at end of cycle
+            session.merge(Variable(name='icmp_delay', value=0))
+            session.merge(Variable(name='icmp_update', value=datetime.now()))
+            session.commit()
+
+            # wait before next cycle
+            time.sleep(max(self.icmp_refresh - cycle_time, 0))
+
         return
-
         # main loop
         while True:
             # init connection to database
@@ -94,18 +137,18 @@ class JobICMP:
                     cursor.execute(sql)
                     nodes = cursor.fetchall()
                     # save cycle start time
-                    start = time.time()
+                    cycle_start = time.time()
                     # fill in queue with nodes params
-                    for node in nodes:
+                    for host_status in nodes:
                         # format db value
-                        node['icmp_timeout'] = max(node['icmp_timeout'], 4)
+                        host_status['icmp_timeout'] = max(host_status['icmp_timeout'], 4)
                         # populate in queue
-                        self._queue_in.put(node)
+                        self._queue_in.put(host_status)
                     # wait until in queue empty (current cycle ending)
                     self._queue_in.join()
                     # save cycle end time
                     end = time.time()
-                    cycle_time = max(end - start, 0)
+                    cycle_time = max(end - cycle_start, 0)
                     # update DB
                     while True:
                         try:
@@ -198,36 +241,14 @@ class JobICMP:
             # wait before next cycle
             time.sleep(max(self.icmp_refresh - cycle_time, 0))
 
-    # def __ping_thread(self, addrs_q, results_q) -> None:
-    #     """Thread code to process (i.e. ping) addresses in addrs_q queue, append result to results_q queue."""
-    #     # thread main loop
-    #     while True:
-    #         # get an IP address from queue
-    #         ip = addrs_q.get()
-    #         # ping it
-    #         args = ['/bin/ping', '-c', '1', '-W', '5', str(ip)]
-    #         p_ping = subprocess.Popen(args, shell=False, stdout=subprocess.PIPE)
-    #         # save ping stdout
-    #         p_ping_out = p_ping.communicate()[0].decode('utf-8')
-    #         # up
-    #         if p_ping.wait() == 0:
-    #             search = re.search(r'rtt min/avg/max/mdev = (.*)/(.*)/(.*)/(.*) ms', p_ping_out, re.M | re.I)
-    #             ping_rtt = float(search.group(2))
-    #             results_q.put(PingResult(ip=ip, is_up=True, rtt_ms=ping_rtt))
-    #         # down
-    #         else:
-    #             results_q.put(PingResult(ip=ip, is_up=False))
-    #         # update queue (this address is processed)
-    #         addrs_q.task_done()
-
     def _worker_code(self):
         """wraps system ping command (use in and out queues to process request)"""
         while True:
             # get node dict from in queue (thread add new key with thread_ prefix to it)
-            d_node = self._queue_in.get()
+            node = self._queue_in.get()
             try:
                 # ping it
-                args = ['/bin/ping', '-c', '1', '-W', str(d_node['icmp_timeout']), str(d_node['host_hostname'])]
+                args = f'/bin/ping -c 1 -W {node.timeout} {node.hostname}'.split()
                 p_ping = subprocess.Popen(args,
                                           shell=False,
                                           stdout=subprocess.PIPE,
@@ -235,7 +256,7 @@ class JobICMP:
                 # save ping stdout
                 p_ping_out = p_ping.communicate()[0].decode('utf-8')
                 # ping return 0 if up
-                d_node['thread_update'] = datetime.now()
+                node.update = datetime.now()
                 # ping command return code
                 ret_code = p_ping.wait()
                 # ping command return 0: ping is ok
@@ -243,20 +264,20 @@ class JobICMP:
                     # rtt min/avg/max/mdev = 22.293/22.293/22.293/0.000 ms
                     regex = 'rtt min/avg/max/mdev = (.*)/(.*)/(.*)/(.*) ms'
                     search = re.search(regex, p_ping_out, re.M | re.I)
-                    d_node['thread_state'] = u'U'
+                    node.state = 'U'
                     if search:
                         try:
-                            d_node['thread_rtt'] = int(round(float(search.group(2))))
+                            node.rtt = int(round(float(search.group(2))))
                         except (AttributeError, ValueError):
-                            d_node['thread_rtt'] = 0
+                            node.rtt = None
                 # ping command return 1: ping timeout
                 elif ret_code == 1:
-                    d_node['thread_state'] = u'D'
+                    node.state = 'D'
                 # ping command error for all others values
                 else:
-                    d_node['thread_state'] = u'E'
+                    node.state = 'E'
                 # update output queue
-                self._queue_out.put(d_node)
+                self._queue_out.put(node)
             finally:
                 # update queue : this node is processed by current thread
                 self._queue_in.task_done()
