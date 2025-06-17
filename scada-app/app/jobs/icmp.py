@@ -5,8 +5,6 @@ Design to use data from/to SQL database.
 Use standard linux /bin/ping utility.
 """
 
-# TODO FIX avoid except in thread : can cause infinite wait ?
-
 import logging
 import os
 import re
@@ -53,116 +51,118 @@ class JobICMP:
         for _ in range(n_threads):
             Thread(target=self._worker_code, args=(), daemon=True).start()
 
-    def _insert_test_data(self, session: Session):
+    def _insert_test_data(self):
         # insert data for test purpose
-        if not session.query(Host).filter_by(name='localhost').first():
-            session.add(Icmp(host=Host(id_subnet=0, name='localhost', hostname='127.0.0.1')))
-        if not session.query(Host).filter_by(name='free').first():
-            session.add(Icmp(host=Host(id_subnet=0, name='free', hostname='www.free.fr')))
-        session.commit()
+        with Session(self.engine) as session:
+            if not session.query(Host).filter_by(name='localhost').first():
+                session.add(Icmp(host=Host(id_subnet=0, name='localhost', hostname='127.0.0.1')))
+            if not session.query(Host).filter_by(name='free').first():
+                session.add(Icmp(host=Host(id_subnet=0, name='free', hostname='www.free.fr')))
+            session.commit()
 
-    def _populate_input_queue(self, session: Session):
-        for icmp in session.query(Icmp).filter(Icmp.icmp_inhibition == '0').all():
-            # populate in queue
-            worker_data = WorkerData(id_host=icmp.id_host, hostname=icmp.host.hostname,
-                                     timeout=icmp.icmp_timeout)
-            self._queue_in.put(worker_data)
-            logger.warning(worker_data)
+    def _populate_input_queue(self):
+        with Session(self.engine) as session:
+            for icmp in session.query(Icmp).filter(Icmp.icmp_inhibition == '0').all():
+                # populate in queue
+                worker_data = WorkerData(id_host=icmp.id_host, hostname=icmp.host.hostname,
+                                         timeout=icmp.icmp_timeout)
+                self._queue_in.put(worker_data)
+                logger.debug(f'add to input queue: {worker_data}')
 
-    def _process_worker_data(self, session: Session, worker_data: WorkerData):
-        icmp = session.query(Icmp).filter_by(id_host=worker_data.id_host).first()
-        if icmp and worker_data.state:
-            #
-            new_state: Optional[str] = None
-            # host is up
-            if worker_data.state == 'U':
-                icmp.icmp_fail_count = 0
-                icmp.icmp_up_index += 1
-                # process "Round Trip Time" info
-                if worker_data.rtt is not None:
-                    icmp.icmp_rtt = worker_data.rtt
-                    # log on need
-                    if icmp.icmp_log_rtt == 'Y':
-                        session.add(IcmpRttLog(id_host=worker_data.id_host,
-                                               rtt=worker_data.rtt,
-                                               rtt_datetime=worker_data.update or datetime.now()))
-                # if node is not already "up"
-                if icmp.icmp_state != 'U':
-                    icmp.icmp_good_count += 1
-                    # up counter > threshold -> host is set "up"
-                    if icmp.icmp_good_count >= icmp.icmp_good_threshold:
-                        new_state = 'U'
-            # host is down
-            elif worker_data.state == 'D':
-                icmp.icmp_down_index += 1
-                icmp.icmp_good_count = 0
-                # if node is not already "down"
-                if icmp.icmp_state != 'D':
-                    # down count++
-                    icmp.icmp_fail_count += 1
-                    # down counter > threshold -> host is set "down"
-                    if icmp.icmp_fail_count >= icmp.icmp_fail_threshold:
-                        new_state = 'D'
-            # host error
-            elif worker_data.state == 'E':
-                if icmp.icmp_state != 'E':
-                    new_state = 'E'
-            # on status change
-            if new_state:
-                # update state
-                icmp.icmp_state = new_state
-                icmp.icmp_chg_state = worker_data.update or datetime.now()
-                # add icmp history
-                session.add(IcmpHistory(id_host=worker_data.id_host, event_type=worker_data.state,
-                                        event_date=worker_data.update or datetime.now()))
-                # add alarm message
-                status_str = dict(E='error', U='up', D='down').get(icmp.icmp_state, 'n/a')
-                msg = f'host "{icmp.host.name}" state: {status_str}'
-                session.add(Alarm(id_host=icmp.id_host, daemon=PROCESS_NAME,
-                                  date_time=datetime.now(), message=msg))
-            session.merge(icmp)
-            logger.warning(f'merge {icmp}')
-        session.commit()
+    def _process_worker_data(self, worker_data: WorkerData):
+        with Session(self.engine) as session:
+            icmp = session.query(Icmp).filter_by(id_host=worker_data.id_host).first()
+            if icmp and worker_data.state:
+                # new_state set on state change
+                new_state: Optional[str] = None
+                # host is up
+                if worker_data.state == 'U':
+                    icmp.icmp_up_index += 1
+                    icmp.icmp_fail_count = 0
+                    # process "Round Trip Time" info
+                    if worker_data.rtt is not None:
+                        icmp.icmp_rtt = worker_data.rtt
+                        # log on need
+                        if icmp.icmp_log_rtt == 'Y':
+                            session.add(IcmpRttLog(id_host=worker_data.id_host,
+                                                   rtt=worker_data.rtt,
+                                                   rtt_datetime=worker_data.update or datetime.now()))
+                    # if node is not already "up"
+                    if icmp.icmp_state != 'U':
+                        icmp.icmp_good_count += 1
+                        # up counter > threshold -> host is set "up"
+                        if icmp.icmp_good_count >= icmp.icmp_good_threshold:
+                            new_state = 'U'
+                # host is down
+                elif worker_data.state == 'D':
+                    icmp.icmp_down_index += 1
+                    icmp.icmp_good_count = 0
+                    # if node is not already "down"
+                    if icmp.icmp_state != 'D':
+                        # down count++
+                        icmp.icmp_fail_count += 1
+                        # down counter > threshold -> host is set "down"
+                        if icmp.icmp_fail_count >= icmp.icmp_fail_threshold:
+                            new_state = 'D'
+                # host error
+                elif worker_data.state == 'E':
+                    if icmp.icmp_state != 'E':
+                        new_state = 'E'
+                # on status change
+                if new_state:
+                    # update state
+                    icmp.icmp_state = new_state
+                    icmp.icmp_chg_state = worker_data.update or datetime.now()
+                    # add icmp history
+                    session.add(IcmpHistory(id_host=worker_data.id_host, event_type=worker_data.state,
+                                            event_date=worker_data.update or datetime.now()))
+                    # add alarm message
+                    status_str = dict(E='error', U='up', D='down').get(icmp.icmp_state, 'n/a')
+                    msg = f'host "{icmp.host.name}" state: {status_str}'
+                    session.add(Alarm(id_host=icmp.id_host, daemon=PROCESS_NAME, date_time=datetime.now(), message=msg))
+                session.merge(icmp)
+                logger.debug(f'session merge {icmp}')
+            session.commit()
 
     def run(self):
         # add test data
-        with Session(self.engine) as session:
-            try:
-                self._insert_test_data(session)
-            except SQLAlchemyError as e:
-                logger.error(f'DB error: {e}')
+        try:
+            with Session(self.engine) as session:
+                self._insert_test_data()
+        except SQLAlchemyError as e:
+            logger.error(f'unable to insert test data (DB error: {e})')
 
         # cycle loop
         while True:
-            with Session(self.engine) as session:
-                try:
-                    # save cycle start time
-                    cycle_start = time.monotonic()
-                    # populate input queue for workers
-                    self._populate_input_queue(session)
-                    # wait until in queue empty (current cycle ending)
-                    self._queue_in.join()
-                    # cycle start time
-                    cycle_duration_s = time.monotonic() - cycle_start
+            try:
+                # save cycle start time
+                cycle_start = time.monotonic()
+                # populate input queue for workers
+                self._populate_input_queue()
+                # wait until in queue empty (current cycle ending)
+                self._queue_in.join()
+                # cycle start time
+                cycle_duration_s = time.monotonic() - cycle_start
 
-                    # process results
-                    while True:
-                        try:
-                            worker_data = self._queue_out.get_nowait()
-                            self._process_worker_data(session, worker_data)
-                        except Empty:
-                            break
+                # process results
+                while True:
+                    try:
+                        worker_data = self._queue_out.get_nowait()
+                        self._process_worker_data(worker_data)
+                    except Empty:
+                        break
 
-                    # update variables at end of cycle
+                # update variables at end of cycle
+                with Session(self.engine) as session:
                     session.merge(Variable(name='icmp_delay', value=cycle_duration_s))
                     session.merge(Variable(name='icmp_update', value=datetime.now()))
                     session.commit()
 
-                    # wait before next cycle
-                    time.sleep(max(self.refresh_s - cycle_duration_s, 0))
-                except SQLAlchemyError as e:
-                    logger.error(f'DB error: {e}')
-                    time.sleep(5.0)
+                # wait before next cycle
+                time.sleep(max(self.refresh_s - cycle_duration_s, 0))
+            except SQLAlchemyError as e:
+                logger.error(f'abort cycle (DB error: {e})')
+                time.sleep(5.0)
 
     def _worker_code(self):
         """wraps system ping command (use in and out queues to process request)"""

@@ -26,7 +26,12 @@ def init_db(use_sqlite: bool = False) -> Engine:
 
 
 def run() -> None:
+    # init logging
+    logging.basicConfig(format='%(asctime)s - %(name)-20s - %(levelname)-8s - %(message)s', level=logging.DEBUG)
+
+    # init DB
     engine = init_db(use_sqlite=False)
+
     # run icmp job
     job_icmp = JobICMP(engine)
     job_icmp.run()
