@@ -13,6 +13,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.orm import Mapped, declarative_base, mapped_column, relationship
+from sqlalchemy.sql import func
 
 # base class for declarative class definitions
 Base = declarative_base()
@@ -25,8 +26,7 @@ class Alarm(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
     id_host: Mapped[int] = mapped_column(ForeignKey('hosts.id'), nullable=False, default=0, server_default='0')
     daemon: Mapped[str] = mapped_column(String(6), nullable=False, default='')
-    date_time: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime(1970, 1, 1),
-                                                server_default=text("'1970-01-01 00:00:00'"))
+    date_time: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
     ack: Mapped[str] = mapped_column(CHAR(1), nullable=False, default='N', server_default='N')
     message: Mapped[str] = mapped_column(String(80), nullable=False, default='')
 
@@ -46,7 +46,8 @@ class Host(Base):
     name: Mapped[str] = mapped_column(String(30), nullable=False)
     hostname: Mapped[str] = mapped_column(String(30), nullable=False)
 
-    icmp: Mapped['Icmp'] = relationship('Icmp', back_populates='host', cascade='all, delete-orphan')
+    icmp: Mapped['Icmp'] = relationship('Icmp', back_populates='host')
+    mbus_l: Mapped[list['Mbus']] = relationship('Mbus', back_populates='host')
 
     def __repr__(self):
         return (f"<Host(id={self.id}, id_subnet={self.id_subnet}, name='{self.name}', "
@@ -158,6 +159,8 @@ class Mbus(Base):
     mbus_timeout: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=4, server_default='4')
     mbus_port: Mapped[int] = mapped_column(Integer, nullable=False, default=502, server_default='502')
 
+    host: Mapped['Host'] = relationship('Host', back_populates='mbus_l')
+
     def __repr__(self):
         return (f"<Mbus(id_host={self.id_host}, mbus_inhibition={self.mbus_inhibition}, "
                 f"mbus_timeout={self.mbus_timeout}, mbus_port={self.mbus_port})>")
@@ -176,6 +179,8 @@ class MbusTables(Base):
     update: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime(1970, 1, 1),
                                              server_default=text("'1970-01-01 00:00:00'"))
     comment: Mapped[str] = mapped_column(Text, nullable=False, default='')
+
+    mbus_ts_l: Mapped[list['MbusTs']] = relationship('MbusTs', back_populates='mbus_table')
 
     def __repr__(self):
         return (f"<MbusTables(id={self.id}, id_host={self.id_host}, unit_id={self.unit_id}, "
@@ -201,6 +206,8 @@ class MbusTs(Base):
     info: Mapped[str] = mapped_column(Text, nullable=False, default='', server_default='1')
     al: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1, server_default='1')
 
+    mbus_table: Mapped['MbusTables'] = relationship('MbusTables', back_populates='mbus_ts_l')
+
     __table_args__ = (Index('mbus_ts.tag', 'tag', unique=True),)
 
     def __repr__(self):
@@ -217,7 +224,7 @@ class MbusTsLog(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
     id_ts: Mapped[int] = mapped_column(ForeignKey('mbus_ts.id'), nullable=False, default=0)
     ts: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
-    update: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime(1970, 1, 1))
+    update: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
 
     __table_args__ = (Index('mbus_ts_log.id_ts', 'id_ts'),
                       Index('mbus_ts_log.update', 'update'))

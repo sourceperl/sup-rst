@@ -5,6 +5,7 @@ from sqlalchemy import URL, Engine, create_engine
 from .db.models import Base
 from .jobs.icmp import JobIcmp
 from .jobs.mbus import JobMbus
+from .jobs.mbus_export import JobMbusExport
 
 logger = logging.getLogger(__name__)
 
@@ -50,3 +51,13 @@ def run_mbus(debug: bool = False) -> None:
     # run job
     logger.info(f'start mbus job (version {__version__})')
     JobMbus(engine).run()
+
+
+def run_mbus_export(debug: bool = False) -> None:
+    # some initializations
+    init_logging(debug=debug)
+    engine = init_db(use_sqlite=False)
+
+    # run job
+    logger.info(f'start mbus-export job (version {__version__})')
+    JobMbusExport(engine).run()

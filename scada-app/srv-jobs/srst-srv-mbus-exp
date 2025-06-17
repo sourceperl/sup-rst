@@ -3,13 +3,13 @@
 """Export some tags to external modbus server."""
 
 
-from configparser import ConfigParser
-from pyModbusTCP.client import ModbusClient
 import datetime
-import schedule
 import time
-from pySupRST import SupRstDB
+from configparser import ConfigParser
 
+import schedule
+from pyModbusTCP.client import ModbusClient
+from pySupRST import SupRstDB
 
 # some consts
 PROCESS_NAME = 'mb_exp'
@@ -30,37 +30,35 @@ def job_export_avion():
     # ts
     ts_l1_mel_m = sup.ts('ARLM_L1_M', False)
     ts_l2_mel_m = sup.ts('ARLM_L2_M', False)
-    ts_mel_m = ts_l1_mel_m or ts_l2_mel_m
+    ts_mel_m = ts_l1_mel_m or ts_l2_mel_m                  # @20486
     # tm
     l_tm = list()
-    l_tm.append(sup.tm('TAIS_A2_PCS', 0))                  # @20536
-    l_tm.append(sup.tm('TAIS_A2_WOBBE', 0))                # @20537
-    l_tm.append(sup.tm('BLA_GRO_CO2', 0))                  # @20538
-    l_tm.append(sup.tm('TAIS_A2_ANC', 0))                  # @20539
-    l_tm.append(sup.tm('ARL_AE2_PCS', 0))                  # @20540
-    l_tm.append(sup.tm('ARL_AE2_WBE', 0))                  # @20541
-    l_tm.append(sup.tm('ARL_AE2_CO2', 0))                  # @20542
-    l_tm.append(sup.tm('Q_ARL_AE', 0))                     # @20543
-    l_tm.append(sup.tm('ARL_AE2_ANC', 0))                  # @20544
+    l_tm.append(0)                                         # @20536
+    l_tm.append(0)                                         # @20537
+    l_tm.append(0)                                         # @20538
+    l_tm.append(0)                                         # @20539
+    l_tm.append(sup.tm('ARL_AE1_PCS', 0))                  # @20540
+    l_tm.append(sup.tm('ARL_AE1_WBE', 0))                  # @20541
+    l_tm.append(sup.tm('ARL_AE1_CO2', 0))                  # @20542
+    l_tm.append(sup.tm('Q_ARL_AE1', 0))                    # @20543
+    l_tm.append(sup.tm('ARL_AE1_ANC', 0))                  # @20544
     l_tm.append(sup.tm('AVION_PCS', 0))                    # @20545
     l_tm.append(sup.tm('AVION_WBE', 0))                    # @20546
     l_tm.append(sup.tm('AVION_HP_CO2', 0))                 # @20547
     l_tm.append(sup.tm('AVION_ANC', 0))                    # @20548
     l_tm.append(sup.tm('Q_ARL_AO', 0))                     # @20549
     l_tm.append(sup.tm('ARL_AO2_PCS', 0))                  # @20550
-    l_tm.append(sup.tm('ARLM_WR_L2', 0))                   # @20551
+    l_tm.append(sup.tm('ARL_AO2_WBE', 0))                  # @20551
     l_tm.append(sup.tm('ARL_AO2_CO2', 0))                  # @20552
     l_tm.append(sup.tm('ARL_AO2_ANC', 0))                  # @20553
     # add life indicator (srv minute)
     l_tm.append(datetime.datetime.now().minute)            # @20554
     # Q Arleux mel.
     l_tm.append(sup.tm('ARLM_Q', 0))                       # @20555
-    # chromato GNY
-    l_tm.append(sup.tm('ARL_GNY_PCS', 0))                  # @20556
-    l_tm.append(sup.tm('ARL_GNY_WBE', 0))                  # @20557
-    # chromato Flx Blaregnies (! Belgian values 0/25 convert to 0/0)
-    l_tm.append(sup.tm('BLA_PCS_GRO_A', 0) * 1.0026)       # @20558
-    l_tm.append(sup.tm('BLA_IW_GRO_A', 0) * 1.0026)        # @20559
+    l_tm.append(0)                                         # @20556
+    l_tm.append(0)                                         # @20557
+    l_tm.append(0)                                         # @20558
+    l_tm.append(0)                                         # @20559
     # network pressure at Arleux injection point (17PIT18B)
     l_tm.append(int(round(sup.tm('ARLM_P_AO1', 0)/10.0)))  # @20560
     sup.close()
