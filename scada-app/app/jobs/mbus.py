@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 # some consts
-PROCESS_NAME = 'icmp'
+PROCESS_NAME = 'mbus'
 
 
 @dataclass
@@ -40,7 +40,7 @@ class WorkerData:
     update: Optional[datetime] = None
 
 
-class JobIcmp:
+class JobMbus:
     def __init__(self, engine: Engine, refresh_s: float = 30.0, n_threads: int = 40) -> None:
         # public
         self.engine = engine
