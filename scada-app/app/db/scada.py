@@ -1,27 +1,39 @@
 import re
-from typing import Optional
+from typing import Optional, TypeVar
 
 from sqlalchemy import Engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
-from ..db.models import Alarm, MbusTs, MbusTsLog, MbusTm
+from ..db.models import Alarm, MbusTm, MbusTs, MbusTsLog
+
+T = TypeVar('T')
 
 
-class ScadaData:
+class Scada:
     def __init__(self, engine: Engine, process: str):
         self.engine = engine
         self.process = process[:6]
 
-    def add_alarm(self, msg: str, id_host: Optional[int] = None):
+    def get_ts(self, tag: str, default: T = None) -> T:
         with Session(self.engine) as session:
-            session.add(Alarm(id_host=id_host, daemon=self.process, message=msg))
-            session.commit()
+            mbus_ts = session.query(MbusTs).filter(MbusTs.tag == tag).first()
+            if mbus_ts:
+                return bool(mbus_ts.ts)
+            else:
+                return default
 
-    def set_ts(self, tag_name: str, ts: bool, id_host: Optional[int] = None):
+    def get_tm(self, tag: str, default: T = None) -> T:
+        with Session(self.engine) as session:
+            if cursor.execute('SELECT `tm` FROM `mbus_tm` WHERE `tag` = %s', tag):
+                return cursor.fetchone()['tm']
+            else:
+                return default
+
+    def set_ts(self, tag: str, ts: bool, id_host: Optional[int] = None):
         with Session(self.engine) as session:
             # ts exist ?
-            mbus_ts = session.query(MbusTs).filter_by(tag=tag_name).first()
+            mbus_ts = session.query(MbusTs).filter_by(tag=tag).first()
             if mbus_ts:
                 try:
                     if mbus_ts.use:
@@ -50,10 +62,10 @@ class ScadaData:
                     session.add(mbus_ts)
                     session.commit()
 
-    def set_tm(self, tag_name: str, tm, id_host: int = 0):
+    def set_tm(self, tag: str, tm, id_host: int = 0):
         with self.db.cursor() as cursor:
             # tm exist ?
-            if cursor.execute('SELECT * FROM `mbus_tm` WHERE `tag` = %s', tag_name):
+            if cursor.execute('SELECT * FROM `mbus_tm` WHERE `tag` = %s', tag):
                 db_tm = cursor.fetchone()
                 try:
                     # tm in use ?
@@ -117,10 +129,10 @@ class ScadaData:
                     # update tm record
                     cursor.execute('UPDATE `mbus_tm` SET `error`=\'1\' WHERE `id`=%s', db_tm['id'])
 
-    def set_tg(self, tag_name: str, index: int):
+    def set_tg(self, tag: str, index: int):
         with self.db.cursor() as cursor:
             # ts exist ?
-            if cursor.execute('SELECT * FROM `mbus_tg` WHERE `tag` = %s', tag_name):
+            if cursor.execute('SELECT * FROM `mbus_tg` WHERE `tag` = %s', tag):
                 db_tg = cursor.fetchone()
                 try:
                     # tg in use ?
@@ -143,28 +155,19 @@ class ScadaData:
                 except TypeError:
                     cursor.execute('UPDATE `mbus_tg` SET `error`=\'1\' WHERE `id`=%s', db_tg['id'])
 
-    def ts(self, tag_name: str, default=None):
-        with self.db.cursor() as cursor:
-            if cursor.execute('SELECT `ts` FROM `mbus_ts` WHERE `tag` = %s', tag_name):
-                return cursor.fetchone()['ts']
-            else:
-                return default
-
-    def tm(self, tag_name: str, default=None):
-        with self.db.cursor() as cursor:
-            if cursor.execute('SELECT `tm` FROM `mbus_tm` WHERE `tag` = %s', tag_name):
-                return cursor.fetchone()['tm']
-            else:
-                return default
+    def add_alarm(self, msg: str, id_host: Optional[int] = None):
+        with Session(self.engine) as session:
+            session.add(Alarm(id_host=id_host, daemon=self.process, message=msg))
+            session.commit()
 
     def strip_tags(self, tags_str: str) -> str:
         # "<TM@Q_GRO>" -> "956.0"
-        t = dict()
+        token_d = dict()
         for (token, token_type, tag) in re.findall(r'(<([A-Z]+?)@([a-zA-Z0-9_]+?)>)', tags_str):
             if token_type == 'TS':
-                t[token] = self.ts(tag, 0)
+                token_d[token] = self.get_ts(tag, default=0)
             elif token_type == 'TM':
-                t[token] = self.tm(tag, 0)
-        for token in t:
-            tags_str = re.sub(token, str(t[token]), tags_str)
+                token_d[token] = self.get_tm(tag, default=0)
+        for token in token_d:
+            tags_str = re.sub(token, str(token_d[token]), tags_str)
         return tags_str
